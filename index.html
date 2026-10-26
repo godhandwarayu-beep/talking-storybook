@@ -1,0 +1,1161 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>นิทานพูดได้</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@400;600;700&family=Sarabun:wght@500;600;700&display=swap">
+<style>
+/* Layout: library shelf → storybook spread (picture + read-along text) → teacher workbench */
+:root{
+  --paper:#fbf7ff;        /* page ground, faint lilac */
+  --ink:#2b2350;          /* deep story-ink violet */
+  --ink-soft:#6a6290;
+  --line:#e4dcf3;
+  --card:#ffffff;
+  --sun:#ffb627;          /* marigold: primary action */
+  --sun-deep:#e08e00;
+  --leaf:#2fb36b;         /* read correctly */
+  --leaf-bg:#c9f2da;
+  --amber-bg:#ffe7a8;     /* read with help */
+  --coral:#ef5b5b;        /* try again */
+  --coral-bg:#ffd9d6;
+  --sky:#5b8def;
+  --f-display:"Mali","Sarabun",system-ui,sans-serif;
+  --f-read:"Sarabun","Leelawadee UI","Thonburi",system-ui,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-display);font-size:17px;line-height:1.6;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  background-image:radial-gradient(circle at 12% 8%,#efe6ff 0,transparent 32%),radial-gradient(circle at 92% 90%,#fff0cf 0,transparent 30%);
+  background-attachment:fixed;min-height:100vh}
+img{max-width:100%}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--ink);background:var(--card);border-radius:14px;padding:9px 16px;font-weight:600;box-shadow:0 3px 0 var(--ink);transition:transform .08s,box-shadow .08s}
+.btn:active{transform:translateY(3px);box-shadow:0 0 0 var(--ink)}
+.btn.primary{background:var(--sun)}
+.btn.ghost{border-color:var(--line);box-shadow:none;background:transparent;color:var(--ink-soft)}
+.btn.danger{color:var(--coral);border-color:var(--coral);box-shadow:0 3px 0 var(--coral)}
+.btn svg{width:22px;height:22px;flex:none}
+.btn[disabled]{opacity:.45;pointer-events:none}
+
+/* header */
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.brand-mark{width:52px;height:52px;flex:none}
+.brand h1{font-size:clamp(26px,4vw,36px);margin:0;line-height:1.1;font-weight:700}
+.brand p{margin:0;color:var(--ink-soft);font-size:15px}
+.switch{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--ink-soft);user-select:none}
+.switch input{width:44px;height:24px;appearance:none;background:var(--line);border-radius:20px;position:relative;cursor:pointer;transition:background .2s}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch input:checked{background:var(--ink)}
+.switch input:checked::after{left:23px}
+
+/* library */
+.teacher-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;padding:14px;border:2px dashed var(--line);border-radius:18px;align-items:center}
+.teacher-bar .hint{color:var(--ink-soft);font-size:14px;flex:1 1 220px}
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:22px}
+.book{background:var(--card);border-radius:8px 18px 18px 8px;border:2px solid var(--ink);box-shadow:-6px 0 0 var(--ink) inset, 0 6px 0 rgba(43,35,80,.12);overflow:hidden;display:flex;flex-direction:column;text-align:left;padding:0}
+.book .cover{aspect-ratio:4/3;width:100%;object-fit:cover;background:#efe8fb;display:block;border-bottom:2px solid var(--ink)}
+.book .meta{padding:10px 18px 12px 14px;display:flex;flex-direction:column;gap:2px}
+.book .t{font-weight:700;font-size:19px;line-height:1.3}
+.book .n{color:var(--ink-soft);font-size:14px}
+.book-wrap{display:flex;flex-direction:column;gap:8px}
+.book-tools{display:flex;gap:6px;flex-wrap:wrap}
+.book-tools .btn{padding:4px 10px;font-size:14px;box-shadow:0 2px 0 var(--ink)}
+.book-tools .btn.danger{box-shadow:0 2px 0 var(--coral)}
+.empty{padding:40px;text-align:center;color:var(--ink-soft);border:2px dashed var(--line);border-radius:18px}
+
+/* reader */
+.rbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.rbar h2{margin:0;font-size:clamp(20px,3vw,26px);flex:1 1 200px;min-width:0}
+.pager{font-variant-numeric:tabular-nums;color:var(--ink-soft);font-weight:600}
+.dots{display:flex;gap:6px;flex-wrap:wrap}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--line)}
+.dot.on{background:var(--ink)}
+.dot.done{background:var(--leaf)}
+.spread{display:grid;gap:18px;grid-template-columns:1fr}
+@media (min-width:900px) and (orientation:landscape){.spread{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);align-items:start}}
+.pic{background:var(--card);border:2px solid var(--ink);border-radius:20px;padding:10px;display:flex;justify-content:center}
+.pic img{max-height:52vh;border-radius:12px;object-fit:contain}
+.pic .noimg{padding:60px 20px;color:var(--ink-soft)}
+.textcard{background:var(--card);border:2px solid var(--ink);border-radius:20px;padding:18px 20px;min-width:0;position:relative}
+.storytext{font-family:var(--f-read);font-weight:600;font-size:clamp(28px,4.4vw,42px);line-height:2.05;word-break:break-word}
+/* karaoke fill: colour sweeps left→right across a word once it is read */
+.w{--fill:var(--leaf-bg);position:relative;border-radius:10px;padding:0 3px;margin:0 -1px;cursor:pointer;
+  background-image:linear-gradient(var(--fill),var(--fill));background-repeat:no-repeat;background-size:0% 100%;
+  transition:background-size .5s ease-out,color .3s,box-shadow .25s;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.w:hover{box-shadow:inset 0 -3px 0 var(--line)}
+.w.next{box-shadow:inset 0 -4px 0 var(--sun)}
+.w.next::before{content:"";position:absolute;left:50%;top:-.18em;width:.26em;height:.26em;border-radius:50%;background:var(--sun);border:2px solid var(--ink);transform:translateX(-50%);animation:ball .55s ease-in-out infinite alternate}
+@keyframes ball{from{transform:translate(-50%,0)}to{transform:translate(-50%,-.3em)}}
+.w.tent{--fill:#dff6e8;background-size:55% 100%}
+.w.ok{--fill:var(--leaf-bg);background-size:100% 100%;color:#145c36}
+.w.okHelp{--fill:var(--amber-bg);background-size:100% 100%;color:#6b4a00}
+.w.wrong{--fill:var(--coral-bg);background-size:100% 100%;color:#a3201f;animation:wob .4s}
+.w.help{box-shadow:inset 0 0 0 3px var(--sun)}
+.w.speaking{--fill:#dce7ff;background-size:100% 100%;color:#1d3f9b;transition:background-size .35s linear}
+.punct{color:var(--ink-soft)}
+@keyframes wob{0%,100%{transform:none}30%{transform:translateX(-3px)}60%{transform:translateX(3px)}}
+.heard{margin-top:6px;min-height:1.6em;color:var(--ink-soft);font-size:15px}
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.mic{width:84px;height:84px;border-radius:50%;border:3px solid var(--ink);background:var(--sun);display:grid;place-items:center;box-shadow:0 5px 0 var(--ink);flex:none}
+.mic svg{width:40px;height:40px}
+.mic.live{background:var(--coral);color:#fff;animation:pulse 1.4s infinite}
+@keyframes pulse{0%{box-shadow:0 5px 0 var(--ink),0 0 0 0 rgba(239,91,91,.5)}70%{box-shadow:0 5px 0 var(--ink),0 0 0 18px rgba(239,91,91,0)}100%{box-shadow:0 5px 0 var(--ink),0 0 0 0 rgba(239,91,91,0)}}
+.mic-label{font-weight:700;font-size:18px;line-height:1.3}
+.mic-label small{display:block;font-weight:400;color:var(--ink-soft);font-size:14px}
+.spacer{flex:1}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--ink-soft);margin-top:12px}
+.legend i{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:4px}
+
+.helpcard{margin-top:16px;border:2px solid var(--sun-deep);background:#fff8e6;border-radius:18px;padding:14px 16px;display:grid;gap:12px}
+.helpcard .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.helpword{font-family:var(--f-read);font-size:clamp(34px,6vw,52px);font-weight:700;line-height:1.2;margin-right:auto}
+.helpmsg{color:#7a5300;font-size:15px}
+.spell{display:flex;gap:8px;flex-wrap:wrap}
+.chip{border:2px solid var(--line);background:#fff;border-radius:14px;padding:6px 12px;text-align:center;min-width:64px;transition:transform .2s,border-color .2s,background .2s}
+.chip b{display:block;font-family:var(--f-read);font-size:34px;line-height:1.2}
+.chip span{font-size:13px;color:var(--ink-soft)}
+.chip.c{border-color:#b9c9f7}.chip.v{border-color:#f7b9cf}.chip.t{border-color:#c7b3f2}.chip.whole{border-color:var(--leaf);background:var(--leaf-bg)}
+.chip.on{transform:translateY(-6px) scale(1.06);border-color:var(--sun-deep);background:#ffeebf}
+
+.done-banner{margin-top:16px;border:2px solid var(--leaf);background:var(--leaf-bg);border-radius:18px;padding:14px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.done-banner .stars{font-size:30px;letter-spacing:4px;color:var(--sun-deep)}
+.done-banner strong{font-size:20px;margin-right:auto}
+
+.notice{background:#fff;border:2px solid var(--coral);color:#8e2a2a;border-radius:14px;padding:10px 14px;margin-bottom:14px;font-size:15px}
+
+/* summary */
+.modal{position:fixed;inset:0;background:rgba(43,35,80,.45);display:grid;place-items:center;padding:20px;z-index:50}
+.modal-box{background:var(--card);border:3px solid var(--ink);border-radius:24px;padding:26px;max-width:460px;width:100%;text-align:center;box-shadow:0 8px 0 var(--ink)}
+.modal-box h3{margin:0 0 6px;font-size:28px}
+.bigstars{font-size:46px;letter-spacing:6px;color:var(--sun-deep);margin:6px 0}
+.modal-box .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+
+/* editor */
+.ed-head{display:grid;gap:10px;grid-template-columns:1fr;margin-bottom:16px}
+label.f{display:grid;gap:4px;font-weight:600}
+label.f small{font-weight:400;color:var(--ink-soft)}
+input[type=text],textarea{font:inherit;color:var(--ink);background:#fff;border:2px solid var(--line);border-radius:12px;padding:10px 12px;width:100%}
+textarea{font-family:var(--f-read);font-size:20px;line-height:1.7;resize:vertical}
+.ed-tools{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-bottom:18px}
+.panel{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:14px;display:grid;gap:10px;align-content:start;min-width:0}
+.panel h4{margin:0;font-size:17px}
+.panel p{margin:0;color:var(--ink-soft);font-size:14px}
+.pages{display:grid;gap:14px}
+.pcard{background:var(--card);border:2px solid var(--ink);border-radius:18px;padding:12px;display:grid;gap:12px;grid-template-columns:200px minmax(0,1fr)}
+@media (max-width:640px){.pcard{grid-template-columns:1fr}}
+.pthumb{display:grid;gap:6px;align-content:start}
+.pthumb .ph{aspect-ratio:4/3;border-radius:12px;background:#efe8fb;border:2px dashed var(--line);display:grid;place-items:center;overflow:hidden;color:var(--ink-soft);font-size:14px;text-align:center}
+.pthumb .ph img{width:100%;height:100%;object-fit:cover}
+.pnum{font-weight:700}
+.pmain{display:grid;gap:8px;min-width:0}
+.preview{font-family:var(--f-read);font-size:18px;line-height:2.1;display:flex;flex-wrap:wrap;gap:4px 3px;align-items:center}
+.preview .tk{border:1.5px solid #b9c9f7;background:#f3f6ff;border-radius:8px;padding:0 6px;line-height:1.6}
+.preview .ps{color:var(--ink-soft)}
+.preview .brk{flex-basis:100%;height:0}
+.prow{display:flex;gap:6px;flex-wrap:wrap}
+.prow .btn{padding:4px 10px;font-size:14px;box-shadow:0 2px 0 var(--ink)}
+.prow .btn.danger{box-shadow:0 2px 0 var(--coral)}
+.savebar{position:sticky;bottom:0;margin-top:20px;padding:12px max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:rgba(251,247,255,.95);border-top:2px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;backdrop-filter:blur(4px)}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:#fff;border-radius:14px;padding:10px 18px;z-index:60;font-size:15px;max-width:90vw}
+
+/* hero: photograph a book */
+.hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center;background:var(--card);border:3px solid var(--ink);border-radius:24px;padding:18px 20px;margin-bottom:22px;box-shadow:0 6px 0 var(--ink)}
+.hero .owl{width:96px;height:96px}
+.hero h2{margin:0;font-size:clamp(21px,3vw,28px);line-height:1.3;text-wrap:balance}
+.hero p{margin:4px 0 12px;color:var(--ink-soft);font-size:15px}
+.hero .row{display:flex;gap:10px;flex-wrap:wrap}
+@media (max-width:520px){.hero{grid-template-columns:1fr}.hero .owl{width:72px;height:72px}}
+.shelf-title{font-size:20px;margin:0 0 12px}
+details.settings{flex-basis:100%;border-top:2px dashed var(--line);padding-top:10px}
+details.settings summary{cursor:pointer;font-weight:600}
+.set-grid{display:grid;gap:10px;margin-top:10px;max-width:640px}
+.set-grid .opt{display:flex;gap:8px;align-items:flex-start;font-size:15px}
+.set-grid .opt small{display:block;color:var(--ink-soft)}
+
+/* tutor (พี่ฮูก) */
+.tutor{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px}
+.tutor .owl{width:64px;height:64px;flex:none;transform-origin:50% 90%}
+.tutor .owl.hop{animation:hop .5s}
+.tutor .owl.shake{animation:wob .45s}
+@keyframes hop{0%,100%{transform:none}40%{transform:translateY(-10px) rotate(-6deg)}}
+.bubble{position:relative;background:#f1ebff;border:2px solid #cbbcf2;border-radius:16px;padding:8px 14px;font-size:17px;line-height:1.5;min-width:0;flex:1}
+.bubble::before{content:"";position:absolute;left:-10px;top:18px;border:8px solid transparent;border-right-color:#cbbcf2;border-left:0}
+.score{display:inline-flex;align-items:center;gap:6px;background:var(--sun);border:2px solid var(--ink);border-radius:999px;padding:3px 14px;font-weight:700;font-variant-numeric:tabular-nums;font-size:18px}
+.score.bump{animation:hop .4s}
+.streak{font-size:14px;color:var(--ink-soft);font-weight:600}
+.pop{position:fixed;z-index:45;font-weight:700;font-size:22px;color:var(--leaf);pointer-events:none;animation:popup 1s ease-out forwards;text-shadow:0 2px 0 #fff}
+.pop.help{color:var(--sun-deep)}
+@keyframes popup{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,-48px)}}
+.autohelp{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--ink-soft)}
+
+/* OCR status in editor */
+.ocrst{font-size:14px;color:var(--ink-soft);min-height:1.4em}
+.ocrst.busy{color:var(--sky);font-weight:600}
+.ocrst.err{color:var(--coral)}
+.ocrst.ok{color:var(--leaf)}
+
+/* confetti */
+.confetti{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
+.confetti i{position:absolute;top:-20px;width:12px;height:18px;border-radius:3px;animation:fall 1.8s ease-in forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.confetti{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><path d="M6 14c9-4 18-4 26 2v38c-8-6-17-6-26-2z" fill="#ffb627" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><path d="M58 14c-9-4-18-4-26 2v38c8-6 17-6 26-2z" fill="#fff" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><path d="M40 26q4 4 0 8M45 22q8 8 0 16" fill="none" stroke="#2b2350" stroke-width="3" stroke-linecap="round"/></svg>
+      <div><h1>นิทานพูดได้</h1><p>อ่านออกเสียง คำที่อ่านถูกจะเปลี่ยนสี</p></div>
+    </div>
+    <label class="switch" for="teacherToggle">โหมดครู <input type="checkbox" id="teacherToggle"></label>
+  </header>
+
+  <!-- LIBRARY -->
+  <section id="vLib">
+    <div class="hero">
+      <svg class="owl" data-owl viewBox="0 0 80 80" aria-hidden="true"></svg>
+      <div>
+        <h2>ถ่ายรูปหน้าหนังสือ แล้วฝึกอ่านกับพี่ฮูก</h2>
+        <p>ถ่ายหรือเลือกภาพหน้าหนังสือ ระบบจะอ่านตัวหนังสือในภาพออกมาเป็นหน้าฝึกอ่าน ถ่ายได้หลายหน้าต่อกัน</p>
+        <div class="row">
+          <button class="btn primary" id="btnCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>ถ่ายรูปหนังสือ</button>
+          <button class="btn" id="btnPick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg>เลือกภาพจากเครื่อง</button>
+          <input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+          <input type="file" id="pickIn" accept="image/*" multiple hidden>
+        </div>
+      </div>
+    </div>
+    <div class="teacher-bar" id="teacherBar" hidden>
+      <button class="btn primary" id="btnNew"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>สร้างนิทานใหม่</button>
+      <button class="btn" id="btnImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>นำเข้าไฟล์นิทาน (.json)</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <span class="hint">นิทานเก็บไว้ในเครื่องนี้ ใช้ "ส่งออก" เพื่อนำไฟล์ไปเปิดในเครื่องนักเรียน</span>
+      <details class="settings">
+        <summary>ตั้งค่าการอ่านตัวหนังสือจากภาพ</summary>
+        <div class="set-grid">
+          <label class="opt" for="engTess"><input type="radio" name="eng" id="engTess" value="tess"><span>อ่านในเครื่อง (ฟรี ไม่ต้องตั้งค่า)<small>ใช้ได้ดีกับตัวพิมพ์ชัด ๆ พื้นหลังเรียบ ครั้งแรกต้องโหลดข้อมูลภาษาไทยประมาณ 1–2 นาที</small></span></label>
+          <label class="opt" for="engGem"><input type="radio" name="eng" id="engGem" value="gemini"><span>ใช้ Gemini อ่าน (แม่นกว่ามาก)<small>ต้องมี API key จาก Google AI Studio ฟรีสำหรับปริมาณการใช้ในห้องเรียน key เก็บไว้ในเครื่องนี้เท่านั้น</small></span></label>
+          <label class="f" for="gemKey">Gemini API key<input type="text" id="gemKey" autocomplete="off" spellcheck="false" placeholder="AIza..."></label>
+          <label class="f" for="gemModel">ชื่อโมเดล <small>เปลี่ยนได้ถ้า Google ออกรุ่นใหม่</small><input type="text" id="gemModel" spellcheck="false"></label>
+        </div>
+      </details>
+    </div>
+    <h3 class="shelf-title">ชั้นหนังสือ</h3>
+    <div class="shelf" id="shelf"></div>
+  </section>
+
+  <!-- READER -->
+  <section id="vRead" hidden>
+    <div class="rbar">
+      <button class="btn ghost" id="btnBack" aria-label="กลับชั้นหนังสือ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>ชั้นหนังสือ</button>
+      <h2 id="rTitle"></h2>
+      <span class="streak" id="rStreak"></span>
+      <span class="score" id="rScore" aria-label="คะแนน">★ 0</span>
+      <span class="pager" id="rPager"></span>
+    </div>
+    <div class="notice" id="srNotice" hidden></div>
+    <div class="spread">
+      <div class="pic" id="rPic"></div>
+      <div class="textcard">
+        <div class="tutor">
+          <svg class="owl" id="owl" data-owl viewBox="0 0 80 80" aria-hidden="true"></svg>
+          <div class="bubble" id="bubble" aria-live="polite">สวัสดีจ้ะ พี่ฮูกจะช่วยฟังนะ กดไมค์แล้วอ่านตามลูกบอลได้เลย</div>
+        </div>
+        <div class="storytext" id="rText"></div>
+        <div class="heard" id="rHeard" aria-live="polite"></div>
+
+        <div class="controls">
+          <button class="mic" id="btnMic" aria-label="เริ่มอ่าน"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+          <div class="mic-label" id="micLabel">กดไมค์แล้วอ่านเลย<small>อ่านทีละคำ ช้า ๆ ชัด ๆ</small></div>
+          <span class="spacer"></span>
+          <button class="btn" id="btnListen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg><span>ฟังทั้งหน้า</span></button>
+        </div>
+
+        <div class="helpcard" id="helpCard" hidden>
+          <div class="row">
+            <div class="helpword" id="helpWord"></div>
+            <button class="btn" id="btnSpell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18l4-12 4 12M4.5 14h5M14 6h4a3 3 0 0 1 0 6h-4zm0 6h5a3 3 0 0 1 0 6h-5z"/></svg>ช่วยสะกดคำ</button>
+            <button class="btn primary" id="btnSay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>ช่วยอ่าน</button>
+            <button class="btn ghost" id="btnHelpClose" aria-label="ปิด">ปิด</button>
+          </div>
+          <div class="helpmsg" id="helpMsg"></div>
+          <div class="spell" id="spellBox"></div>
+        </div>
+
+        <div class="done-banner" id="doneBanner" hidden>
+          <span class="stars" id="doneStars"></span>
+          <strong id="doneText">อ่านครบหน้านี้แล้ว เก่งมาก!</strong>
+          <button class="btn primary" id="btnDoneNext">หน้าถัดไป</button>
+        </div>
+
+        <div class="legend">
+          <span><i style="background:var(--leaf-bg)"></i>อ่านถูก</span>
+          <span><i style="background:var(--amber-bg)"></i>อ่านถูกเมื่อมีคนช่วย</span>
+          <span><i style="background:var(--coral-bg)"></i>ลองอ่านอีกครั้ง</span>
+          <span><i style="box-shadow:inset 0 -4px 0 var(--sun);background:#fff"></i>คำถัดไป</span>
+          <label class="autohelp" for="autoHelp"><input type="checkbox" id="autoHelp">พี่ฮูกสะกดให้ฟังอัตโนมัติเมื่ออ่านไม่ได้</label>
+        </div>
+      </div>
+    </div>
+    <div class="controls" style="justify-content:space-between">
+      <button class="btn" id="btnPrev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>หน้าก่อน</button>
+      <div class="dots" id="rDots"></div>
+      <button class="btn" id="btnNext">หน้าถัดไป<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+  </section>
+
+  <!-- EDITOR -->
+  <section id="vEdit" hidden>
+    <div class="rbar"><button class="btn ghost" id="btnEdBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>ยกเลิก</button><h2 id="edHeading">สร้างนิทานใหม่</h2></div>
+    <div class="ed-head">
+      <label class="f" for="edTitle">ชื่อนิทาน<input type="text" id="edTitle" placeholder="เช่น ส้มกับปลาในบ่อ"></label>
+    </div>
+    <div class="ed-tools">
+      <div class="panel">
+        <h4>1. ถ่ายรูปหรือใส่ภาพหน้าหนังสือ</h4>
+        <p>เลือกได้หลายภาพพร้อมกัน ระบบเรียงหน้าตามชื่อไฟล์ แล้วอ่านตัวหนังสือในภาพให้อัตโนมัติ</p>
+        <div class="prow">
+          <button class="btn primary" id="btnEdCam">ถ่ายรูปหน้าถัดไป</button><input type="file" id="edCam" accept="image/*" capture="environment" hidden>
+          <button class="btn" id="btnBulkImg">เลือกภาพ</button><input type="file" id="bulkImg" accept="image/*" multiple hidden>
+        </div>
+        <label class="autohelp" for="autoOcr"><input type="checkbox" id="autoOcr" checked>อ่านตัวหนังสือจากภาพใหม่อัตโนมัติ</label>
+      </div>
+      <div class="panel">
+        <h4>2. วางคำอ่านทั้งเรื่อง</h4>
+        <p>เว้นบรรทัดว่าง 1 บรรทัดระหว่างแต่ละหน้า ระบบจะใส่ให้ตามลำดับหน้า</p>
+        <textarea id="bulkText" rows="4" placeholder="หน้า 1 ...&#10;&#10;หน้า 2 ..."></textarea>
+        <div><button class="btn" id="btnBulkText">ใส่คำอ่านลงในหน้า</button></div>
+      </div>
+      <div class="panel">
+        <h4>3. ตรวจการแบ่งคำ</h4>
+        <p>กรอบสีฟ้า 1 กรอบ = 1 คำที่นักเรียนต้องอ่าน ถ้าแบ่งผิด ให้ใส่เครื่องหมาย / คั่นคำเอง เช่น ต้น/ไม้ หรือ ต้นไม้</p>
+        <label class="f" for="edSpell">คำสะกดพิเศษ <small>ไม่บังคับ บรรทัดละ 1 คำ เช่น ปลา = ปอ-ลอ-อา-ปลา</small>
+          <textarea id="edSpell" rows="3" placeholder="ปลา = ปอ-ลอ-อา-ปลา"></textarea></label>
+      </div>
+    </div>
+    <div class="pages" id="edPages"></div>
+    <div style="margin-top:14px"><button class="btn" id="btnAddPage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>เพิ่มหน้าว่าง</button></div>
+    <div class="savebar">
+      <button class="btn ghost" id="btnEdCancel">ยกเลิก</button>
+      <button class="btn" id="btnEdTry">ลองอ่าน</button>
+      <button class="btn primary" id="btnEdSave">บันทึกนิทาน</button>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="summary" hidden>
+  <div class="modal-box" role="dialog" aria-labelledby="sumTitle">
+    <h3 id="sumTitle">อ่านจบเรื่องแล้ว!</h3>
+    <div class="bigstars" id="sumStars"></div>
+    <p id="sumText"></p>
+    <div class="row"><button class="btn" id="btnSumAgain">อ่านอีกครั้ง</button><button class="btn primary" id="btnSumHome">เลือกเรื่องใหม่</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+"use strict";
+/* ================= helpers ================= */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => t.hidden = true, ms); }
+function lsGet(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+/* ================= storage (IndexedDB) ================= */
+const store = (() => {
+  let dbp = null; const mem = new Map();
+  function open() {
+    if (dbp) return dbp;
+    dbp = new Promise((res) => {
+      try {
+        const r = indexedDB.open('talking-storybook', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('books', { keyPath: 'id' });
+        r.onsuccess = () => res(r.result); r.onerror = () => res(null);
+      } catch (e) { res(null); }
+    });
+    return dbp;
+  }
+  async function tx(mode, fn) {
+    const db = await open(); if (!db) return fn(null);
+    return new Promise((res, rej) => { const t = db.transaction('books', mode); const s = t.objectStore('books'); const out = fn(s); t.oncomplete = () => res(out && out.result !== undefined ? out.result : out); t.onerror = () => rej(t.error); });
+  }
+  return {
+    all: async () => { const r = await tx('readonly', s => s ? s.getAll() : [...mem.values()]); return Array.isArray(r) ? r : []; },
+    put: b => tx('readwrite', s => s ? s.put(b) : mem.set(b.id, b)),
+    del: id => tx('readwrite', s => s ? s.delete(id) : mem.delete(id)),
+  };
+})();
+
+/* ================= Thai text: tokenizing & matching ================= */
+const segmenter = (typeof Intl !== 'undefined' && Intl.Segmenter) ? new Intl.Segmenter('th', { granularity: 'word' }) : null;
+const READABLE = /[ก-ฮะ-๎A-Za-z0-9๐-๙]/;
+const TONES = /[่-์็]/g; // ่ ้ ๊ ๋ ์ ็
+
+function norm(s) { return String(s).toLowerCase().replace(/[\s​‌‍.,!?"'“”‘’()\[\]{}\-:;…ฯ/]/g, '').replace(/ๆ/g, ''); }
+function loose(s) { return s.replace(TONES, ''); }
+
+function tokenize(text) {
+  const out = [];
+  const lines = String(text || '').replace(/\r/g, '').split('\n');
+  lines.forEach((line, li) => {
+    line.split(/(\s+)/).forEach(chunk => {
+      if (!chunk) return;
+      if (/^\s+$/.test(chunk)) { out.push({ t: ' ', space: true }); return; }
+      let parts;
+      if (chunk.includes('/')) parts = chunk.split('/').filter(Boolean);
+      else if (segmenter) parts = [...segmenter.segment(chunk)].map(x => x.segment);
+      else parts = [chunk];
+      parts.forEach(p => {
+        // merge ไม้ยมก into previous word
+        if (/^ๆ+$/.test(p.trim()) && out.length && out[out.length - 1].readable) { out[out.length - 1].t += p; return; }
+        out.push({ t: p, readable: READABLE.test(p) && norm(p).length > 0 });
+      });
+    });
+    if (li < lines.length - 1) out.push({ br: true });
+  });
+  out.forEach(tk => {
+    if (!tk.readable) return;
+    const base = norm(tk.t);
+    tk.n = base;
+    tk.alts = /ๆ/.test(tk.t) ? [base + base, base] : [base];
+  });
+  return out;
+}
+
+function levRatio(a, b) {
+  if (a === b) return 1; const m = a.length, n = b.length; if (!m || !n) return 0;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+  return 1 - prev[n] / Math.max(m, n);
+}
+
+const SLACK = 6;
+function findWord(t, alts, p) {
+  for (const w of alts) { const pos = t.indexOf(w, p); if (pos >= 0 && pos - p <= SLACK) return { s: pos, e: pos + w.length }; }
+  for (const w of alts) {
+    const lw = loose(w);
+    for (let s = p; s <= Math.min(p + SLACK, t.length - 1); s++) {
+      for (const L of [w.length, w.length + 1, w.length - 1, w.length + 2]) {
+        if (L < 1 || s + L > t.length) continue;
+        const sub = loose(t.substr(s, L));
+        if (sub === lw || (lw.length >= 3 && levRatio(sub, lw) >= 0.75)) return { s, e: s + L };
+      }
+    }
+  }
+  return null;
+}
+
+/* ================= letters for spelling help ================= */
+const CONS = {'ก':['ไก่','กอ'],'ข':['ไข่','ขอ'],'ฃ':['ขวด','ขอ'],'ค':['ควาย','คอ'],'ฅ':['คน','คอ'],'ฆ':['ระฆัง','คอ'],'ง':['งู','งอ'],'จ':['จาน','จอ'],'ฉ':['ฉิ่ง','ฉอ'],'ช':['ช้าง','ชอ'],'ซ':['โซ่','ซอ'],'ฌ':['เฌอ','ชอ'],'ญ':['หญิง','ยอ'],'ฎ':['ชฎา','ดอ'],'ฏ':['ปฏัก','ตอ'],'ฐ':['ฐาน','ถอ'],'ฑ':['มณโฑ','ทอ'],'ฒ':['ผู้เฒ่า','ทอ'],'ณ':['เณร','นอ'],'ด':['เด็ก','ดอ'],'ต':['เต่า','ตอ'],'ถ':['ถุง','ถอ'],'ท':['ทหาร','ทอ'],'ธ':['ธง','ทอ'],'น':['หนู','นอ'],'บ':['ใบไม้','บอ'],'ป':['ปลา','ปอ'],'ผ':['ผึ้ง','ผอ'],'ฝ':['ฝา','ฝอ'],'พ':['พาน','พอ'],'ฟ':['ฟัน','ฟอ'],'ภ':['สำเภา','พอ'],'ม':['ม้า','มอ'],'ย':['ยักษ์','ยอ'],'ร':['เรือ','รอ'],'ล':['ลิง','ลอ'],'ว':['แหวน','วอ'],'ศ':['ศาลา','สอ'],'ษ':['ฤๅษี','สอ'],'ส':['เสือ','สอ'],'ห':['หีบ','หอ'],'ฬ':['จุฬา','ลอ'],'อ':['อ่าง','ออ'],'ฮ':['นกฮูก','ฮอ']};
+const VOW = {'ะ':'สระอะ','ั':'ไม้หันอากาศ','า':'สระอา','ำ':'สระอำ','ิ':'สระอิ','ี':'สระอี','ึ':'สระอึ','ื':'สระอือ','ุ':'สระอุ','ู':'สระอู','เ':'สระเอ','แ':'สระแอ','โ':'สระโอ','ใ':'ไม้ม้วน','ไ':'ไม้มลาย','็':'ไม้ไต่คู้','ฤ':'รึ','ฦ':'ลึ','ๅ':'ลากข้าง'};
+const TONE = {'่':'ไม้เอก','้':'ไม้โท','๊':'ไม้ตรี','๋':'ไม้จัตวา','์':'ทัณฑฆาต','ๆ':'ไม้ยมก'};
+const LEAD = 'เแโใไ';
+
+function parseSpellMap(text) {
+  const m = {};
+  String(text || '').split('\n').forEach(l => { const i = l.indexOf('='); if (i < 0) return; const k = l.slice(0, i).trim(); const v = l.slice(i + 1).trim(); if (k && v) m[norm(k)] = v.split(/\s*-\s*/).filter(Boolean); });
+  return m;
+}
+function spellParts(word, map) {
+  const key = norm(word);
+  if (map && map[key]) {
+    const arr = map[key];
+    return arr.map((s, i) => ({ show: s, say: s, label: i === arr.length - 1 ? 'อ่านว่า' : '', kind: i === arr.length - 1 ? 'whole' : 'c' }));
+  }
+  const chars = [...key];
+  const ordered = [];
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i];
+    if (LEAD.includes(ch) && i + 1 < chars.length && CONS[chars[i + 1]]) { ordered.push(chars[i + 1], ch); i++; }
+    else ordered.push(ch);
+  }
+  const parts = ordered.map(ch => {
+    if (CONS[ch]) return { show: ch, say: CONS[ch][1], label: ch + ' ' + CONS[ch][0], kind: 'c' };
+    if (VOW[ch]) return { show: ch === 'ั' || ch === 'ิ' || ch === 'ี' || ch === 'ึ' || ch === 'ื' || ch === 'ุ' || ch === 'ู' || ch === '็' || ch === 'ำ' ? '◌' + ch : ch, say: VOW[ch], label: VOW[ch], kind: 'v' };
+    if (TONE[ch]) return { show: '◌' + ch, say: TONE[ch], label: TONE[ch], kind: 't' };
+    return { show: ch, say: ch, label: '', kind: 'c' };
+  });
+  parts.push({ show: word.replace(/\//g, ''), say: word, label: 'อ่านว่า', kind: 'whole' });
+  return parts;
+}
+
+/* ================= sound ================= */
+let actx = null;
+function beep(notes) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    let t = actx.currentTime;
+    notes.forEach(([f, d, type]) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = type || 'sine'; o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.18, t + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d + .05); t += d * .8; });
+  } catch (e) {}
+}
+const sndOk = () => beep([[880, .12]]);
+const sndPage = () => beep([[523, .15], [659, .15], [784, .15], [1047, .35]]);
+const sndOops = () => beep([[260, .18, 'triangle'], [220, .22, 'triangle']]);
+function confetti() {
+  const box = document.createElement('div'); box.className = 'confetti';
+  const cols = ['#ffb627', '#2fb36b', '#5b8def', '#ef5b5b', '#b07cf5'];
+  for (let i = 0; i < 60; i++) { const p = document.createElement('i'); p.style.left = Math.random() * 100 + '%'; p.style.background = cols[i % cols.length]; p.style.animationDelay = Math.random() * .5 + 's'; p.style.animationDuration = 1.4 + Math.random() * 1.2 + 's'; box.appendChild(p); }
+  document.body.appendChild(box); setTimeout(() => box.remove(), 3200);
+}
+
+/* ================= text-to-speech ================= */
+const tts = window.speechSynthesis || null;
+let thVoice = null;
+function pickVoice() { if (!tts) return; const vs = tts.getVoices(); thVoice = vs.find(v => /^th/i.test(v.lang) && /google/i.test(v.name)) || vs.find(v => /^th/i.test(v.lang)) || null; }
+if (tts) { pickVoice(); tts.onvoiceschanged = pickVoice; }
+
+let speakToken = 0;
+function speak(text, rate = 0.85) {
+  return new Promise(res => {
+    if (!tts) { res(); return; }
+    pauseRecForSpeech();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'th-TH'; if (thVoice) u.voice = thVoice; u.rate = rate;
+    let done = false; const fin = () => { if (done) return; done = true; res(); };
+    u.onend = fin; u.onerror = fin;
+    setTimeout(fin, 1200 + text.length * 400);
+    tts.speak(u);
+  });
+}
+function stopSpeech() { speakToken++; if (tts) tts.cancel(); }
+
+/* ================= speech recognition ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let rec = null, listening = false, recPaused = false, finalBuf = '';
+
+function startRec() {
+  if (!SR) return;
+  try { if (rec) { rec.onend = null; rec.abort(); } } catch (e) {}
+  rec = new SR();
+  rec.lang = 'th-TH'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 4;
+  rec.onresult = onResult;
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { listening = false; updateMicUI(); showNotice('ยังไม่ได้อนุญาตให้ใช้ไมโครโฟน กดรูปกุญแจ/ไมค์ที่แถบที่อยู่เว็บ แล้วเลือก "อนุญาต"'); }
+    else if (e.error === 'network') { showNotice('การฟังเสียงต้องต่ออินเทอร์เน็ต ตรวจสอบสัญญาณแล้วกดไมค์อีกครั้ง'); }
+  };
+  rec.onend = () => { if (listening && !recPaused) setTimeout(() => { if (listening && !recPaused) startRec(); }, 150); };
+  try { rec.start(); } catch (e) {}
+}
+function pauseRecForSpeech() {
+  if (!listening || recPaused) return;
+  recPaused = true; try { rec && rec.abort(); } catch (e) {}
+  const check = () => { if (cur.talking || (tts && (tts.speaking || tts.pending))) { setTimeout(check, 250); return; } recPaused = false; if (listening) startRec(); };
+  setTimeout(check, 400);
+}
+function startListening() {
+  if (!SR) { showNotice('อุปกรณ์หรือเบราว์เซอร์นี้ยังฟังเสียงพูดไม่ได้ กรุณาเปิดด้วย Google Chrome (ยังใช้ปุ่มฟัง/ช่วยอ่านได้ตามปกติ)'); return; }
+  stopReadAlong(); stopSpeech();
+  listening = true; recPaused = false; finalBuf = ''; lastProgress = Date.now(); startRec(); updateMicUI();
+  if (cur.book) tutorSay('พี่ฮูกฟังอยู่นะ อ่านคำที่ลูกบอลเด้งอยู่ได้เลย');
+}
+function stopListening() {
+  listening = false; recPaused = false; finalBuf = '';
+  try { if (rec) { rec.onend = null; rec.abort(); } } catch (e) {}
+  rec = null; cur.tent = new Set(); updateMicUI(); if (cur.book) renderText();
+}
+function updateMicUI() {
+  const b = $('#btnMic'); b.classList.toggle('live', listening);
+  b.setAttribute('aria-label', listening ? 'หยุดฟัง' : 'เริ่มอ่าน');
+  $('#micLabel').innerHTML = listening ? 'กำลังฟังอยู่… อ่านได้เลย<small>กดไมค์อีกครั้งเพื่อหยุด</small>' : 'กดไมค์แล้วอ่านเลย<small>อ่านทีละคำ ช้า ๆ ชัด ๆ</small>';
+}
+function showNotice(msg) { const n = $('#srNotice'); n.textContent = msg; n.hidden = false; }
+
+function onResult(e) {
+  let interim = '', lastFinal = '';
+  for (let r = e.resultIndex; r < e.results.length; r++) {
+    const res = e.results[r];
+    if (res.isFinal) { const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript); lastFinal = alts[0]; handleFinal(alts); }
+    else interim += res[0].transcript;
+  }
+  const shown = (interim || lastFinal).trim();
+  if (shown) $('#rHeard').textContent = 'ได้ยินว่า: ' + shown;
+  setTentative(interim);
+}
+
+/* ================= reader state ================= */
+const cur = { book: null, p: 0, tokens: [], status: [], tent: new Set(), helped: new Set(), stats: [], helpIdx: -1, spellMap: {}, readingAlong: false, score: 0, streak: 0, pops: [], talking: false, readingIdx: -1 };
+
+function cursorIdx() { for (let i = 0; i < cur.tokens.length; i++) if (cur.tokens[i].readable && !/^ok/.test(cur.status[i])) return i; return -1; }
+
+function matchFrom(start, text) {
+  const t = norm(text); let p = 0, i = start; const matched = [];
+  while (i < cur.tokens.length) {
+    const tk = cur.tokens[i];
+    if (!tk.readable || /^ok/.test(cur.status[i])) { i++; continue; }
+    const f = findWord(t, tk.alts, p); if (!f) break;
+    matched.push(i); p = f.e; i++;
+  }
+  return { matched, consumed: p, t };
+}
+
+function handleFinal(alts) {
+  const start = cursorIdx(); if (start < 0) return;
+  let best = null;
+  for (const a of alts) { const m = matchFrom(start, finalBuf + a); if (!best || m.matched.length > best.matched.length) best = m; }
+  best.matched.forEach(markOk);
+  const rem = best.t.slice(best.consumed);
+  const nowIdx = cursorIdx();
+  if (nowIdx < 0) { finalBuf = ''; cur.tent = new Set(); renderText(); flushPops(); return pageComplete(); }
+  const want = cur.tokens[nowIdx].n;
+  if (rem && want.startsWith(rem)) finalBuf = rem;                 // half a word so far, wait for the rest
+  else if ((best.matched.length === 0 && rem.length >= 2) || rem.length >= 3) { finalBuf = ''; markWrong(nowIdx); }
+  else finalBuf = '';
+  if (best.matched.length) { sndOk(); if (cur.helpIdx >= 0 && /^ok/.test(cur.status[cur.helpIdx])) closeHelp(); }
+  cur.tent = new Set(); renderText(); flushPops();
+}
+
+function setTentative(interim) {
+  const start = cursorIdx();
+  if (!interim || start < 0) { if (cur.tent.size) { cur.tent = new Set(); renderText(); } return; }
+  cur.tent = new Set(matchFrom(start, finalBuf + interim).matched); renderText();
+}
+
+function markOk(i) {
+  const helped = cur.helped.has(i) || cur.status[i] === 'wrong';
+  cur.status[i] = helped ? 'okHelp' : 'ok';
+  lastProgress = Date.now();
+  if (helped) { cur.streak = 0; addScore(i, 5); tutorSay('อ่านได้แล้ว เก่งมาก! คำต่อไปเลย'); }
+  else {
+    cur.streak++; let pts = 10;
+    if (cur.streak % 5 === 0) { pts += 10; tutorSay('อ่านถูกติดกัน ' + cur.streak + ' คำ ได้โบนัส!'); }
+    else if (Math.random() < .35) tutorSay(PRAISE[Math.floor(Math.random() * PRAISE.length)]);
+    addScore(i, pts);
+  }
+}
+function markWrong(i) {
+  if (/^ok/.test(cur.status[i])) return;
+  cur.status[i] = 'wrong'; cur.stats[cur.p].wrongs++; cur.streak = 0; sndOops();
+  lastProgress = Date.now();
+  const w = cur.tokens[i].t.replace(/\//g, '');
+  if (autoHelp) {
+    openHelp(i, 'ฟังพี่ฮูกสะกดนะ แล้วอ่านตาม');
+    tutorSay('คำว่า "' + w + '" ยังไม่ถูกนะ ฟังพี่สะกดให้ฟัง', 'oops');
+    setTimeout(doSpell, 500);
+  } else {
+    openHelp(i, 'ยังไม่ใช่นะ ลองอ่านคำนี้อีกครั้ง หรือกดปุ่มให้ช่วย');
+    tutorSay('ลองอ่านคำนี้อีกครั้งนะ ใช้ปุ่มช่วยได้', 'oops');
+  }
+}
+
+function renderText() {
+  const next = cursorIdx();
+  $('#rText').innerHTML = cur.tokens.map((tk, i) => {
+    if (tk.br) return '<br>';
+    if (tk.space) return ' ';
+    if (!tk.readable) return `<span class="punct">${esc(tk.t)}</span>`;
+    let cls = 'w';
+    const st = cur.status[i];
+    if (/^ok/.test(st)) cls += ' ' + st;
+    else { if (st === 'wrong') cls += ' wrong'; if (cur.tent.has(i)) cls += ' tent'; if (i === next && !cur.tent.has(i)) cls += ' next'; }
+    if (i === cur.helpIdx) cls += ' help';
+    if (cur.readingIdx === i) cls += ' speaking';
+    return `<span class="${cls}" data-i="${i}" role="button" tabindex="0">${esc(tk.t)}</span>`;
+  }).join('');
+}
+
+function loadPage(i) {
+  stopListening(); stopReadAlong(); stopSpeech(); closeHelp();
+  const pages = cur.book.pages; cur.p = Math.max(0, Math.min(i, pages.length - 1));
+  const pg = pages[cur.p];
+  cur.tokens = tokenize(pg.text);
+  const done = cur.stats[cur.p].done;
+  cur.status = cur.tokens.map(t => t.readable ? (done ? 'ok' : 'todo') : 'skip');
+  cur.helped = new Set(); cur.tent = new Set(); cur.readingIdx = -1;
+  $('#rPic').innerHTML = pg.img ? `<img src="${pg.img}" alt="ภาพประกอบหน้า ${cur.p + 1}">` : '<div class="noimg">หน้านี้ไม่มีภาพ</div>';
+  $('#rPager').textContent = `หน้า ${cur.p + 1} / ${pages.length}`;
+  $('#rDots').innerHTML = pages.map((_, k) => `<span class="dot${k === cur.p ? ' on' : ''}${cur.stats[k].done && k !== cur.p ? ' done' : ''}"></span>`).join('');
+  $('#btnPrev').disabled = cur.p === 0;
+  $('#btnNext').disabled = cur.p === pages.length - 1;
+  $('#doneBanner').hidden = !done;
+  if (done) showDoneBanner(false);
+  $('#rHeard').textContent = '';
+  tutorSay(done ? 'หน้านี้อ่านครบแล้ว กดหน้าถัดไปได้เลย' : cur.p === 0 ? 'สวัสดีจ้ะ พี่ฮูกจะช่วยฟังนะ กดไมค์แล้วอ่านตามลูกบอลได้เลย' : 'หน้า ' + (cur.p + 1) + ' แล้ว กดไมค์แล้วอ่านต่อเลย');
+  renderText();
+}
+
+function starsFor(s) { if (!s.done) return 0; if (!s.helps && !s.wrongs) return 3; if (s.helps + s.wrongs <= 2) return 2; return 1; }
+function showDoneBanner() {
+  const s = cur.stats[cur.p], n = starsFor(s);
+  $('#doneStars').textContent = '★'.repeat(n) + '☆'.repeat(3 - n);
+  const last = cur.p === cur.book.pages.length - 1;
+  $('#doneText').textContent = n === 3 ? 'อ่านถูกทุกคำ เก่งมาก!' : 'อ่านครบหน้านี้แล้ว เยี่ยมเลย!';
+  $('#btnDoneNext').textContent = last ? 'ดูผลการอ่าน' : 'หน้าถัดไป';
+  $('#doneBanner').hidden = false;
+}
+function pageComplete() {
+  cur.stats[cur.p].done = true;
+  stopListening(); closeHelp(); renderText();
+  sndPage(); confetti(); showDoneBanner();
+  tutorSay('อ่านครบหน้านี้แล้ว เก่งที่สุดเลย! ตอนนี้มี ' + cur.score + ' คะแนน');
+  $('#rDots').children[cur.p] && $('#rDots').children[cur.p].classList.add('done');
+}
+function showSummary() {
+  const tot = cur.stats.reduce((a, s) => a + starsFor(s), 0), max = cur.stats.length * 3;
+  const doneN = cur.stats.filter(s => s.done).length;
+  const n = Math.round(tot / max * 3);
+  $('#sumStars').textContent = '★'.repeat(n) + '☆'.repeat(3 - n);
+  $('#sumText').textContent = `ได้ ${cur.score} คะแนน · อ่านครบ ${doneN} จาก ${cur.stats.length} หน้า · ดาวรวม ${tot} จาก ${max} ดวง`;
+  $('#summary').hidden = false; confetti();
+}
+
+/* ---- help ---- */
+function openHelp(i, msg) {
+  cur.helpIdx = i; const tk = cur.tokens[i];
+  $('#helpWord').textContent = tk.t.replace(/\//g, '');
+  $('#helpMsg').textContent = msg || 'กดปุ่มให้ช่วยสะกดหรือช่วยอ่าน แล้วลองอ่านเองอีกครั้ง';
+  $('#spellBox').innerHTML = '';
+  $('#helpCard').hidden = false; renderText();
+}
+function closeHelp() { cur.helpIdx = -1; $('#helpCard').hidden = true; $('#spellBox').innerHTML = ''; if (cur.book) renderText(); }
+function noteHelp(i) { if (!cur.helped.has(i)) { cur.helped.add(i); cur.stats[cur.p].helps++; } }
+
+async function doSay() {
+  const i = cur.helpIdx; if (i < 0) return; noteHelp(i);
+  stopSpeech(); cur.talking = true; if (listening) pauseRecForSpeech();
+  try { await speak(cur.tokens[i].t.replace(/\//g, ''), 0.6); } finally { cur.talking = false; lastProgress = Date.now(); }
+  $('#helpMsg').textContent = 'ตาหนูแล้ว ลองอ่านตามเลย';
+  tutorSay('ตาหนูแล้ว อ่านตามพี่เลยนะ');
+}
+async function doSpell() {
+  if (cur.talking) return;
+  cur.talking = true; if (listening) pauseRecForSpeech();
+  try { await spellSeq(); } finally { cur.talking = false; lastProgress = Date.now(); }
+  if (cur.helpIdx >= 0) tutorSay('ตาหนูแล้ว ลองอ่านคำนี้ดูนะ');
+}
+async function spellSeq() {
+  const i = cur.helpIdx; if (i < 0) return; noteHelp(i);
+  stopSpeech(); const my = ++speakToken;
+  const parts = spellParts(cur.tokens[i].t, cur.spellMap);
+  $('#spellBox').innerHTML = parts.map((p, k) => `<div class="chip ${p.kind}" data-k="${k}"><b>${esc(p.show)}</b><span>${esc(p.label)}</span></div>`).join('');
+  const chips = [...$('#spellBox').children];
+  for (let k = 0; k < parts.length; k++) {
+    if (my !== speakToken) return;
+    chips.forEach(c => c.classList.remove('on')); chips[k].classList.add('on');
+    await speak(parts[k].say, parts[k].kind === 'whole' ? 0.65 : 0.8);
+    await sleep(180);
+  }
+  chips.forEach(c => c.classList.remove('on'));
+  $('#helpMsg').textContent = 'ตาหนูแล้ว ลองอ่านคำนี้ดูนะ';
+}
+
+/* ---- read-along ---- */
+async function readAlong() {
+  if (cur.readingAlong) { stopReadAlong(); return; }
+  stopListening(); stopSpeech(); closeHelp();
+  cur.readingAlong = true; $('#btnListen span').textContent = 'หยุดฟัง';
+  const my = ++speakToken;
+  for (let i = 0; i < cur.tokens.length; i++) {
+    if (my !== speakToken || !cur.readingAlong) break;
+    const tk = cur.tokens[i]; if (!tk.readable) continue;
+    cur.readingIdx = i; renderText();
+    await speak(tk.t.replace(/\//g, ''), 0.85);
+  }
+  stopReadAlong();
+}
+function stopReadAlong() { if (!cur.readingAlong && cur.readingIdx < 0) return; cur.readingAlong = false; cur.readingIdx = -1; $('#btnListen span').textContent = 'ฟังทั้งหน้า'; stopSpeech(); if (cur.book) renderText(); }
+
+/* ================= views ================= */
+let books = [], teacher = lsGet('tsb-teacher', false);
+function show(v) { ['vLib', 'vRead', 'vEdit'].forEach(id => $('#' + id).hidden = id !== v); window.scrollTo(0, 0); }
+
+function openBook(book) {
+  cur.book = book; cur.spellMap = parseSpellMap(book.spell);
+  cur.stats = book.pages.map(() => ({ done: false, helps: 0, wrongs: 0 }));
+  cur.score = 0; cur.streak = 0; cur.pops = [];
+  $('#rScore').textContent = '★ 0'; $('#rStreak').textContent = '';
+  $('#autoHelp').checked = autoHelp;
+  $('#rTitle').textContent = book.title;
+  $('#srNotice').hidden = true;
+  if (!SR) showNotice('อุปกรณ์หรือเบราว์เซอร์นี้ยังฟังเสียงพูดไม่ได้ กรุณาเปิดด้วย Google Chrome (ยังใช้ปุ่มฟัง/ช่วยอ่านได้ตามปกติ)');
+  else if (tts && !thVoice) setTimeout(() => { if (!thVoice) showNotice('เครื่องนี้ยังไม่มีเสียงอ่านภาษาไทย ปุ่ม "ช่วยอ่าน" อาจไม่มีเสียง (ติดตั้งเสียงไทยในการตั้งค่าเครื่อง)'); }, 1500);
+  show('vRead'); loadPage(0);
+}
+function leaveReader() { stopListening(); stopReadAlong(); stopSpeech(); closeHelp(); cur.book = null; show('vLib'); renderShelf(); }
+
+function renderShelf() {
+  $('#teacherBar').hidden = !teacher;
+  $('#teacherToggle').checked = teacher;
+  const all = mergedBooks();
+  if (!all.length) { $('#shelf').innerHTML = '<div class="empty">ยังไม่มีนิทาน เปิด "โหมดครู" แล้วกด "สร้างนิทานใหม่"</div>'; return; }
+  $('#shelf').innerHTML = all.map(b => `
+    <div class="book-wrap">
+      <button class="book" data-open="${esc(b.id)}">
+        ${b.pages[0] && b.pages[0].img ? `<img class="cover" src="${b.pages[0].img}" alt="">` : '<div class="cover"></div>'}
+        <span class="meta"><span class="t">${esc(b.title)}</span><span class="n">${b.pages.length} หน้า${b.builtin ? ' · เรื่องตัวอย่าง' : ''}</span></span>
+      </button>
+      ${teacher ? `<div class="book-tools">
+        <button class="btn" data-edit="${esc(b.id)}">แก้ไข</button>
+        <button class="btn" data-export="${esc(b.id)}">ส่งออก</button>
+        ${b.builtin ? '' : `<button class="btn danger" data-del="${esc(b.id)}">ลบ</button>`}
+      </div>` : ''}
+    </div>`).join('');
+}
+function mergedBooks() {
+  const ids = new Set(books.map(b => b.id));
+  const demo = ids.has(DEMO.id) ? [] : [DEMO];
+  return [...books.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0)), ...demo];
+}
+const findBook = id => mergedBooks().find(b => b.id === id);
+async function reloadBooks() { books = await store.all(); renderShelf(); }
+
+/* ---- export / import ---- */
+function exportBook(b) {
+  const data = { format: 'talking-storybook', version: 1, id: b.id, title: b.title, spell: b.spell || '', pages: b.pages };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = (b.title || 'นิทาน').replace(/[\\/:*?"<>|]/g, '') + '.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('ส่งออกไฟล์นิทานแล้ว');
+}
+function validBook(d) { return d && Array.isArray(d.pages) && d.pages.length && typeof d.title === 'string'; }
+async function importJSON(d) {
+  if (!validBook(d)) throw new Error('bad');
+  const b = { id: d.id && !d.builtin ? d.id : uid(), title: d.title, spell: d.spell || '', pages: d.pages.map(p => ({ img: p.img || '', text: p.text || '' })), updated: Date.now() };
+  await store.put(b); await reloadBooks(); return b;
+}
+
+/* ================= editor ================= */
+let draft = null, editingId = null;
+function openEditor(book) {
+  editingId = book ? book.id : null;
+  draft = book ? JSON.parse(JSON.stringify({ title: book.title, spell: book.spell || '', pages: book.pages })) : { title: '', spell: '', pages: [{ img: '', text: '' }] };
+  $('#edHeading').textContent = book ? 'แก้ไขนิทาน' : 'สร้างนิทานใหม่';
+  $('#edTitle').value = draft.title; $('#edSpell').value = draft.spell; $('#bulkText').value = '';
+  renderPages(); show('vEdit');
+}
+function previewHTML(text) {
+  const tks = tokenize(text);
+  if (!tks.some(t => t.readable)) return '<span class="ps">ยังไม่มีคำอ่าน</span>';
+  return tks.map(t => t.br ? '<span class="brk"></span>' : t.space ? '' : t.readable ? `<span class="tk">${esc(t.t)}</span>` : `<span class="ps">${esc(t.t)}</span>`).join('');
+}
+function renderPages() {
+  $('#edPages').innerHTML = draft.pages.map((p, i) => `
+    <div class="pcard" data-pi="${i}">
+      <div class="pthumb">
+        <span class="pnum">หน้า ${i + 1}</span>
+        <div class="ph">${p.img ? `<img src="${p.img}" alt="">` : 'ยังไม่มีภาพ'}</div>
+        <div class="prow"><button class="btn" data-act="img">${p.img ? 'เปลี่ยนภาพ' : 'ใส่ภาพ'}</button>${p.img ? '<button class="btn" data-act="rot">หมุนภาพ</button>' : ''}<input type="file" accept="image/*" hidden data-file="${i}"></div>
+      </div>
+      <div class="pmain">
+        <div class="prow">${p.img ? `<button class="btn" data-act="ocr">อ่านตัวหนังสือจากภาพ</button>` : ''}</div>
+        <div class="ocrst ${p._ocr ? p._ocr.cls : ''}" data-ocr="${i}">${p._ocr ? esc(p._ocr.msg) : ''}</div>
+        <textarea id="pt${i}" rows="3" data-text="${i}" placeholder="พิมพ์คำอ่านของหน้านี้ หรือกด &quot;อ่านตัวหนังสือจากภาพ&quot;">${esc(p.text)}</textarea>
+        <div class="preview" data-prev="${i}">${previewHTML(p.text)}</div>
+        <div class="prow">
+          <button class="btn" data-act="up" ${i === 0 ? 'disabled' : ''}>เลื่อนขึ้น</button>
+          <button class="btn" data-act="down" ${i === draft.pages.length - 1 ? 'disabled' : ''}>เลื่อนลง</button>
+          <button class="btn danger" data-act="del">ลบหน้านี้</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+function compressImage(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = () => {
+      const M = 1400; let w = img.naturalWidth, h = img.naturalHeight; const s = Math.min(1, M / Math.max(w, h)); w = Math.round(w * s); h = Math.round(h * s);
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('img')); };
+    img.src = url;
+  });
+}
+function collectDraft() { draft.title = $('#edTitle').value.trim(); draft.spell = $('#edSpell').value; }
+async function saveDraft() {
+  collectDraft();
+  if (!draft.title) { toast('ใส่ชื่อนิทานก่อนนะครับ'); $('#edTitle').focus(); return null; }
+  const pages = draft.pages.filter(p => p.img || p.text.trim()).map(p => ({ img: p.img, text: p.text }));
+  if (!pages.length) { toast('ต้องมีอย่างน้อย 1 หน้าที่มีภาพหรือคำอ่าน'); return null; }
+  const b = { id: editingId || uid(), title: draft.title, spell: draft.spell, pages, updated: Date.now() };
+  try { await store.put(b); } catch (e) { toast('บันทึกไม่สำเร็จ พื้นที่ในเครื่องอาจเต็ม ลองลดจำนวนภาพ'); return null; }
+  editingId = b.id; await reloadBooks(); return b;
+}
+
+/* ================= OCR: read the text printed in a page photo ================= */
+const ocrCfg = () => Object.assign({ engine: 'tess', key: '', model: 'gemini-2.5-flash' }, lsGet('tsb-ocr', {}));
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+let tessWorker = null, tessProgress = () => {};
+async function ocrTesseract(dataUrl, onp) {
+  if (!window.Tesseract) { onp('กำลังโหลดตัวอ่านภาพ…'); await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'); }
+  tessProgress = onp;
+  if (!tessWorker) {
+    onp('กำลังโหลดข้อมูลภาษาไทย (ครั้งแรกใช้เวลาสักครู่)…');
+    tessWorker = await Tesseract.createWorker('tha', 1, { logger: m => { if (m.status === 'recognizing text') tessProgress('กำลังอ่านตัวหนังสือ ' + Math.round(m.progress * 100) + '%'); } });
+  }
+  const r = await tessWorker.recognize(dataUrl);
+  return r.data.text;
+}
+const GEM_PROMPT = 'ภาพนี้คือหน้าหนังสือนิทานหรือหนังสือเรียนภาษาไทยสำหรับเด็ก ถอดเฉพาะข้อความเนื้อเรื่องที่ต้องอ่านในภาพออกมาให้ตรงตามตัวสะกดในภาพทุกตัวอักษร คงการขึ้นบรรทัดใหม่ตามหนังสือ ไม่ต้องใส่เลขหน้า หัวกระดาษ หรือคำอธิบายใด ๆ ถ้าไม่มีข้อความให้ตอบว่า (ไม่มีข้อความ)';
+async function ocrGemini(dataUrl, cfg, onp) {
+  onp('กำลังให้ Gemini อ่านภาพ…');
+  const mime = dataUrl.slice(5, dataUrl.indexOf(';')), b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model.trim())}:generateContent`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.key.trim() },
+    body: JSON.stringify({ contents: [{ parts: [{ text: GEM_PROMPT }, { inline_data: { mime_type: mime, data: b64 } }] }], generationConfig: { temperature: 0 } })
+  });
+  if (!r.ok) { const code = r.status; throw new Error(code === 400 || code === 403 ? 'key' : code === 404 ? 'model' : code === 429 ? 'quota' : 'net'); }
+  const j = await r.json();
+  const t = ((j.candidates || [])[0] || {}).content;
+  const text = t && t.parts ? t.parts.map(p => p.text || '').join('') : '';
+  return /\(ไม่มีข้อความ\)/.test(text) ? '' : text;
+}
+function cleanOCR(text) {
+  const lines = String(text || '').replace(/\r/g, '').split('\n').map(l => {
+    l = l.replace(/[|_~^`<>{}\[\]\\=@#$%*•■□©®]/g, '').replace(/\s+/g, ' ').trim();
+    const parts = l.split(' ');
+    const singles = parts.filter(t => /^[฀-๿]{1,2}$/.test(t)).length;
+    if (parts.length > 3 && singles / parts.length > 0.4) l = l.replace(/([฀-๿])\s+(?=[฀-๿])/g, '$1');
+    return l;
+  }).filter(l => /[ก-ฮ]/.test(l) && !/^[\d๐-๙\s.\-]+$/.test(l));
+  return lines.join('\n').trim();
+}
+async function runOCR(dataUrl, onp) {
+  const cfg = ocrCfg();
+  if (cfg.engine === 'gemini' && cfg.key.trim()) return cleanOCR(await ocrGemini(dataUrl, cfg, onp));
+  return cleanOCR(await ocrTesseract(dataUrl, onp));
+}
+const OCR_ERR = { key: 'Gemini ไม่รับ API key นี้ ตรวจ key ในโหมดครู > ตั้งค่า', model: 'ไม่พบชื่อโมเดล Gemini นี้ แก้ชื่อโมเดลในการตั้งค่า', quota: 'ใช้ Gemini ครบโควตาแล้ว รอสักครู่แล้วลองใหม่', net: 'เชื่อมต่อไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่' };
+
+function setPageOcr(page, cls, msg) {
+  page._ocr = { cls, msg };
+  const i = draft.pages.indexOf(page); if (i < 0) return;
+  const el = $(`[data-ocr="${i}"]`); if (el) { el.className = 'ocrst ' + cls; el.textContent = msg; }
+}
+let ocrChain = Promise.resolve();
+function queueOCR(page) {
+  setPageOcr(page, 'busy', 'รอคิวอ่านตัวหนังสือ…');
+  ocrChain = ocrChain.then(async () => {
+    if (draft.pages.indexOf(page) < 0) return;
+    try {
+      const text = await runOCR(page.img, m => setPageOcr(page, 'busy', m));
+      if (!text) { setPageOcr(page, 'err', 'ไม่พบตัวหนังสือในภาพ ลองถ่ายใหม่ให้ตรงและชัด หรือพิมพ์เอง'); return; }
+      page.text = text;
+      const i = draft.pages.indexOf(page);
+      const ta = $('#pt' + i); if (ta) { ta.value = text; $(`[data-prev="${i}"]`).innerHTML = previewHTML(text); }
+      setPageOcr(page, 'ok', 'อ่านเสร็จแล้ว ตรวจคำให้ตรงกับในภาพอีกครั้ง แก้ได้ในช่องด้านล่าง');
+    } catch (e) {
+      setPageOcr(page, 'err', OCR_ERR[e.message] || 'อ่านตัวหนังสือไม่สำเร็จ ลองกดอ่านใหม่ หรือพิมพ์เอง');
+    }
+  });
+}
+async function addImages(files, ocrIt) {
+  files = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  if (!files.length) return;
+  toast('กำลังใส่ภาพ ' + files.length + ' หน้า…', 6000);
+  let k = draft.pages.findIndex(p => !p.img && !p.text.trim()); if (k < 0) k = draft.pages.length;
+  const added = [];
+  for (const f of files) {
+    try { const img = await compressImage(f); if (k < draft.pages.length) draft.pages[k].img = img; else draft.pages.push({ img, text: '' }); added.push(draft.pages[k]); k++; } catch (err) {}
+  }
+  renderPages();
+  if (ocrIt) added.forEach(queueOCR);
+  toast('ใส่ภาพแล้ว ' + added.length + ' หน้า');
+  const last = draft.pages.indexOf(added[added.length - 1]); const el = $(`[data-pi="${last}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function rotateDataUrl(url) {
+  return new Promise(res => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'); c.width = img.naturalHeight; c.height = img.naturalWidth; const g = c.getContext('2d'); g.translate(c.width, 0); g.rotate(Math.PI / 2); g.drawImage(img, 0, 0); res(c.toDataURL('image/jpeg', 0.85)); }; img.src = url; });
+}
+
+/* ================= tutor, score ================= */
+const OWL = '<polygon points="18,22 22,4 34,16" fill="#8c6bd6" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><polygon points="62,22 58,4 46,16" fill="#8c6bd6" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><path d="M14 52q-8 10 3 19M66 52q8 10-3 19" fill="#7a59c4" stroke="#2b2350" stroke-width="3" stroke-linecap="round"/><ellipse cx="40" cy="46" rx="27" ry="29" fill="#8c6bd6" stroke="#2b2350" stroke-width="3"/><ellipse cx="40" cy="57" rx="15" ry="15" fill="#e3d8fb"/><circle cx="29" cy="34" r="11" fill="#fff" stroke="#2b2350" stroke-width="3"/><circle cx="51" cy="34" r="11" fill="#fff" stroke="#2b2350" stroke-width="3"/><circle cx="31" cy="35" r="5" fill="#2b2350"/><circle cx="49" cy="35" r="5" fill="#2b2350"/><circle cx="32.5" cy="33" r="1.7" fill="#fff"/><circle cx="50.5" cy="33" r="1.7" fill="#fff"/><path d="M36 43l4 7 4-7z" fill="#ffb627" stroke="#2b2350" stroke-width="2.5" stroke-linejoin="round"/><path d="M33 77v-4M47 77v-4" stroke="#ffb627" stroke-width="4" stroke-linecap="round"/>';
+document.querySelectorAll('[data-owl]').forEach(s => s.innerHTML = OWL);
+const PRAISE = ['ถูกต้อง!', 'เก่งมาก!', 'เยี่ยมเลย!', 'อ่านชัดมาก!', 'สุดยอด!', 'ใช่แล้ว!'];
+function tutorSay(msg, mood) {
+  $('#bubble').textContent = msg;
+  const o = $('#owl'); o.classList.remove('hop', 'shake'); void o.getBoundingClientRect(); o.classList.add(mood === 'oops' ? 'shake' : 'hop');
+}
+function addScore(i, pts) {
+  cur.score += pts;
+  const s = $('#rScore'); s.textContent = '★ ' + cur.score; s.classList.remove('bump'); void s.offsetWidth; s.classList.add('bump');
+  $('#rStreak').textContent = cur.streak >= 3 ? 'อ่านถูกติดกัน ' + cur.streak + ' คำ' : '';
+  cur.pops.push([i, pts]);
+}
+function flushPops() {
+  cur.pops.splice(0).forEach(([i, pts]) => {
+    const w = $(`#rText [data-i="${i}"]`); if (!w) return;
+    const r = w.getBoundingClientRect(); const d = document.createElement('div');
+    d.className = 'pop' + (pts < 10 ? ' help' : ''); d.textContent = '+' + pts;
+    d.style.left = (r.left + r.width / 2) + 'px'; d.style.top = (r.top - 8) + 'px';
+    document.body.appendChild(d); setTimeout(() => d.remove(), 1000);
+  });
+}
+let autoHelp = lsGet('tsb-autohelp', true), lastProgress = 0;
+setInterval(() => {
+  if (!listening || cur.talking || !autoHelp || !cur.book) return;
+  const i = cursorIdx(); if (i < 0) return;
+  if (Date.now() - lastProgress > 9000) {
+    lastProgress = Date.now();
+    openHelp(i, 'ติดคำนี้อยู่ใช่ไหม ฟังพี่ฮูกสะกดนะ');
+    tutorSay('ติดคำว่า "' + cur.tokens[i].t.replace(/\//g, '') + '" ใช่ไหม ฟังพี่สะกดให้นะ', 'oops');
+    doSpell();
+  }
+}, 1000);
+
+/* ================= demo book (drawn illustrations) ================= */
+function catSVG(x, y, s, mood) {
+  const eyes = mood === 'sleep'
+    ? '<path d="M-78 -8q8 6 16 0M-48 -8q8 6 16 0" stroke="#2b2350" stroke-width="4" fill="none" stroke-linecap="round"/>'
+    : '<circle cx="-70" cy="-8" r="7" fill="#2b2350"/><circle cx="-40" cy="-8" r="7" fill="#2b2350"/><circle cx="-68" cy="-10" r="2.5" fill="#fff"/><circle cx="-38" cy="-10" r="2.5" fill="#fff"/>';
+  const mouth = mood === 'sad' ? '<path d="M-62 18q7-6 14 0" stroke="#2b2350" stroke-width="3" fill="none"/>' : '<path d="M-62 12q7 7 14 0" stroke="#2b2350" stroke-width="3" fill="none"/>';
+  return `<g transform="translate(${x} ${y}) scale(${s})">
+    <path d="M60 30q70-10 50-80" stroke="#e8822a" stroke-width="18" fill="none" stroke-linecap="round"/>
+    <ellipse cx="10" cy="40" rx="78" ry="46" fill="#f59a3c" stroke="#2b2350" stroke-width="4"/>
+    <path d="M-10 0v30M15 -2v32M40 4v26" stroke="#d9741d" stroke-width="7" stroke-linecap="round"/>
+    <polygon points="-95,-30 -88,-78 -62,-42" fill="#f59a3c" stroke="#2b2350" stroke-width="4" stroke-linejoin="round"/>
+    <polygon points="-45,-42 -20,-78 -15,-30" fill="#f59a3c" stroke="#2b2350" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="-55" cy="0" r="48" fill="#f59a3c" stroke="#2b2350" stroke-width="4"/>
+    ${eyes}<ellipse cx="-55" cy="6" rx="6" ry="4" fill="#e0565b"/>${mouth}
+    <path d="M-95 8h-26M-95 16l-24 6M-15 8h26M-15 16l24 6" stroke="#2b2350" stroke-width="2.5" stroke-linecap="round"/>
+  </g>`;
+}
+function fishSVG(x, y, flip) { return `<g transform="translate(${x} ${y}) scale(${flip ? -1 : 1} 1)"><ellipse cx="0" cy="0" rx="26" ry="14" fill="#ff7a59" stroke="#2b2350" stroke-width="3"/><polygon points="24,0 44,-14 44,14" fill="#ff7a59" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><circle cx="-12" cy="-3" r="3.5" fill="#2b2350"/></g>`; }
+function scene(kind) {
+  const sky = '<rect width="800" height="500" fill="#bfe3ff"/><circle cx="690" cy="80" r="44" fill="#ffd34d"/><path d="M90 90q30-30 60 0q30-20 50 10H70q0-20 20-10z" fill="#fff"/>';
+  const grass = '<rect y="330" width="800" height="170" fill="#8fd16a"/><path d="M0 330q200-30 400 0t400 0v10H0z" fill="#7cc257"/>';
+  const tree = '<rect x="560" y="170" width="40" height="170" rx="10" fill="#9a6b3f" stroke="#2b2350" stroke-width="4"/><circle cx="580" cy="150" r="95" fill="#4caf50" stroke="#2b2350" stroke-width="4"/><circle cx="530" cy="130" r="18" fill="#6ccf70"/><circle cx="620" cy="110" r="14" fill="#6ccf70"/>';
+  const pond = '<ellipse cx="260" cy="410" rx="230" ry="70" fill="#5fb7f5" stroke="#2b2350" stroke-width="4"/><path d="M120 400q20-8 40 0M300 430q20-8 40 0" stroke="#d4eeff" stroke-width="4" fill="none" stroke-linecap="round"/>';
+  let body = '';
+  if (kind === 1) body = sky + grass + tree + catSVG(560, 330, 0.8, 'sleep') + '<text x="640" y="250" font-size="36" font-family="Mali" fill="#2b2350">z z z</text>';
+  if (kind === 2) body = sky + grass + pond + fishSVG(220, 410) + fishSVG(330, 420, true) + catSVG(640, 300, 0.9, 'open');
+  if (kind === 3) body = sky + grass + pond + catSVG(300, 380, 0.85, 'sad') + '<g fill="#5fb7f5" stroke="#2b2350" stroke-width="3"><circle cx="170" cy="300" r="12"/><circle cx="420" cy="290" r="14"/><circle cx="240" cy="250" r="10"/><circle cx="380" cy="230" r="9"/></g><text x="470" y="220" font-size="64" font-weight="700" font-family="Mali" fill="#2b2350">ตูม!</text>';
+  if (kind === 4) body = sky + grass + tree + pond + catSVG(640, 330, 0.75, 'open') + '<text x="40" y="70" font-size="30" font-family="Mali" fill="#2b2350">ห่างน้ำไว้นะ</text>';
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">${body}</svg>`);
+}
+const DEMO = {
+  id: 'demo-som', builtin: true, title: 'ส้มกับปลาในบ่อ',
+  spell: 'ปลา = ปอ-ลอ-อา-ปลา',
+  pages: [
+    { img: scene(1), text: 'ส้ม/เป็น/แมว/สี/ส้ม\nส้ม/ชอบ/นอน/ใต้/ต้นไม้' },
+    { img: scene(2), text: 'วัน/หนึ่ง ส้ม/เห็น/ปลา/ใน/บ่อ/น้ำ\nส้ม/อยาก/กิน/ปลา' },
+    { img: scene(3), text: 'ส้ม/ยื่น/ขา/ลง/ไป/ใน/น้ำ\nตูม! ส้ม/ตก/น้ำ/เปียก/ทั้ง/ตัว' },
+    { img: scene(4), text: 'ส้ม/จึง/รู้/ว่า\nไม่/ควร/เล่น/ใกล้/น้ำ' },
+  ]
+};
+
+/* ================= events ================= */
+$('#teacherToggle').addEventListener('change', e => { teacher = e.target.checked; lsSet('tsb-teacher', teacher); renderShelf(); });
+$('#shelf').addEventListener('click', async e => {
+  const b = e.target.closest('[data-open],[data-edit],[data-export],[data-del]'); if (!b) return;
+  if (b.dataset.open) openBook(findBook(b.dataset.open));
+  else if (b.dataset.edit) openEditor(findBook(b.dataset.edit));
+  else if (b.dataset.export) exportBook(findBook(b.dataset.export));
+  else if (b.dataset.del) {
+    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'กดอีกครั้งเพื่อลบ'; setTimeout(() => { if (b.isConnected) { b.dataset.confirm = ''; b.textContent = 'ลบ'; } }, 3000); return; }
+    await store.del(b.dataset.del); await reloadBooks(); toast('ลบนิทานแล้ว');
+  }
+});
+$('#btnNew').onclick = () => openEditor(null);
+$('#btnImport').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { const b = await importJSON(JSON.parse(await f.text())); toast('นำเข้า "' + b.title + '" แล้ว'); }
+  catch (err) { toast('ไฟล์นี้ไม่ใช่ไฟล์นิทานที่ส่งออกจากระบบนี้'); }
+};
+
+$('#btnBack').onclick = leaveReader;
+$('#btnMic').onclick = () => { listening ? stopListening() : startListening(); };
+$('#btnListen').onclick = readAlong;
+$('#btnPrev').onclick = () => loadPage(cur.p - 1);
+$('#btnNext').onclick = () => loadPage(cur.p + 1);
+$('#btnDoneNext').onclick = () => { if (cur.p === cur.book.pages.length - 1) showSummary(); else loadPage(cur.p + 1); };
+$('#btnSay').onclick = doSay;
+$('#btnSpell').onclick = doSpell;
+$('#btnHelpClose').onclick = () => { stopSpeech(); closeHelp(); };
+const wordTap = e => { const w = e.target.closest('.w'); if (!w) return; if (cur.readingAlong) return; openHelp(+w.dataset.i); };
+$('#rText').addEventListener('click', wordTap);
+$('#rText').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wordTap(e); } });
+$('#btnSumAgain').onclick = () => { $('#summary').hidden = true; openBook(cur.book); };
+$('#btnSumHome').onclick = () => { $('#summary').hidden = true; leaveReader(); };
+
+/* editor events */
+$('#edPages').addEventListener('input', e => {
+  const i = e.target.dataset.text; if (i === undefined) return;
+  draft.pages[i].text = e.target.value;
+  $(`[data-prev="${i}"]`).innerHTML = previewHTML(e.target.value);
+});
+$('#edPages').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const card = b.closest('[data-pi]'); const i = +card.dataset.pi; const act = b.dataset.act;
+  if (act === 'img') card.querySelector('input[type=file]').click();
+  if (act === 'rot') { rotateDataUrl(draft.pages[i].img).then(u => { draft.pages[i].img = u; renderPages(); }); }
+  if (act === 'ocr') queueOCR(draft.pages[i]);
+  if (act === 'up' && i > 0) { [draft.pages[i - 1], draft.pages[i]] = [draft.pages[i], draft.pages[i - 1]]; renderPages(); }
+  if (act === 'down' && i < draft.pages.length - 1) { [draft.pages[i + 1], draft.pages[i]] = [draft.pages[i], draft.pages[i + 1]]; renderPages(); }
+  if (act === 'del') {
+    if (b.dataset.confirm !== '1') { b.dataset.confirm = '1'; b.textContent = 'กดอีกครั้งเพื่อลบ'; return; }
+    draft.pages.splice(i, 1); if (!draft.pages.length) draft.pages.push({ img: '', text: '' }); renderPages();
+  }
+});
+$('#edPages').addEventListener('change', async e => {
+  const i = e.target.dataset.file; if (i === undefined) return;
+  const f = e.target.files[0]; if (!f) return;
+  try { draft.pages[i].img = await compressImage(f); renderPages(); if ($('#autoOcr').checked) queueOCR(draft.pages[i]); } catch (err) { toast('เปิดภาพนี้ไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG'); }
+});
+$('#btnBulkImg').onclick = () => $('#bulkImg').click();
+$('#bulkImg').onchange = e => { const f = [...e.target.files]; e.target.value = ''; addImages(f, $('#autoOcr').checked); };
+$('#btnEdCam').onclick = () => $('#edCam').click();
+$('#edCam').onchange = e => { const f = [...e.target.files]; e.target.value = ''; addImages(f, $('#autoOcr').checked); };
+
+/* home: photograph / pick book pages → new book */
+function newFromPhotos(files) {
+  if (!files.length) return;
+  openEditor(null);
+  $('#edTitle').value = 'หนังสือของฉัน ' + new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+  addImages(files, true);
+}
+$('#btnCam').onclick = () => $('#camIn').click();
+$('#btnPick').onclick = () => $('#pickIn').click();
+$('#camIn').onchange = e => { const f = [...e.target.files]; e.target.value = ''; newFromPhotos(f); };
+$('#pickIn').onchange = e => { const f = [...e.target.files]; e.target.value = ''; newFromPhotos(f); };
+
+/* OCR settings */
+(function initOcrSettings() {
+  const c = ocrCfg();
+  $('#engTess').checked = c.engine !== 'gemini'; $('#engGem').checked = c.engine === 'gemini';
+  $('#gemKey').value = c.key; $('#gemModel').value = c.model;
+  const save = () => lsSet('tsb-ocr', { engine: $('#engGem').checked ? 'gemini' : 'tess', key: $('#gemKey').value.trim(), model: $('#gemModel').value.trim() || 'gemini-2.5-flash' });
+  ['engTess', 'engGem', 'gemKey', 'gemModel'].forEach(id => $('#' + id).addEventListener('change', save));
+})();
+$('#autoHelp').onchange = e => { autoHelp = e.target.checked; lsSet('tsb-autohelp', autoHelp); };
+$('#btnBulkText').onclick = () => {
+  const blocks = $('#bulkText').value.replace(/\r/g, '').split(/\n\s*\n|\n?^-{3,}$\n?/m).map(s => s.trim()).filter(Boolean);
+  if (!blocks.length) { toast('วางคำอ่านในช่องก่อน'); return; }
+  blocks.forEach((t, k) => { if (k < draft.pages.length) draft.pages[k].text = t; else draft.pages.push({ img: '', text: t }); });
+  renderPages(); toast('ใส่คำอ่าน ' + blocks.length + ' หน้าแล้ว');
+};
+$('#btnAddPage').onclick = () => { draft.pages.push({ img: '', text: '' }); renderPages(); };
+$('#btnEdBack').onclick = $('#btnEdCancel').onclick = () => { show('vLib'); renderShelf(); };
+$('#btnEdSave').onclick = async () => { const b = await saveDraft(); if (b) { toast('บันทึก "' + b.title + '" แล้ว'); show('vLib'); renderShelf(); } };
+$('#btnEdTry').onclick = async () => { const b = await saveDraft(); if (b) openBook(b); };
+
+/* ================= boot ================= */
+(async function boot() {
+  await reloadBooks();
+  const q = new URLSearchParams(location.search).get('book');
+  if (q) {
+    try { const r = await fetch(q); const b = await importJSON(await r.json()); openBook(findBook(b.id)); }
+    catch (e) { toast('เปิดไฟล์นิทานจากลิงก์ไม่ได้'); }
+  }
+})();
+</script>
+</body>
+</html>
