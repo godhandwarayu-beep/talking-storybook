@@ -294,6 +294,12 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
   .pic img{max-height:64vh}
 }
 
+.crop-box{max-width:860px;text-align:center}
+.crop-wrap{display:flex;justify-content:center;margin-top:10px}
+.crop-stage{position:relative;display:inline-block;max-width:100%;touch-action:none;user-select:none;-webkit-user-select:none;cursor:crosshair;border-radius:12px;overflow:hidden;line-height:0}
+.crop-stage img{display:block;max-width:100%;max-height:58vh;width:auto;pointer-events:none}
+.crop-rect{position:absolute;border:3px solid var(--teal);background:rgba(24,195,165,.14);box-shadow:0 0 0 9999px rgba(19,35,58,.45);border-radius:6px;pointer-events:none}
+
 /* confetti */
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:3px;animation:fall 1.8s ease-in forwards}
@@ -451,6 +457,14 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
     <div class="bigstars" id="sumStars"></div>
     <p id="sumText"></p>
     <div class="row"><button class="btn" id="btnSumAgain">อ่านอีกครั้ง</button><button class="btn primary" id="btnSumHome">เลือกเรื่องใหม่</button></div>
+  </div>
+</div>
+<div class="modal" id="cropModal" hidden>
+  <div class="modal-box crop-box" role="dialog" aria-labelledby="cropTitle">
+    <h3 id="cropTitle">เลือกบริเวณตัวหนังสือ</h3>
+    <p>ลากกรอบครอบเฉพาะข้อความนิทาน ไม่รวมภาพวาด ระบบจะอ่านเฉพาะในกรอบ</p>
+    <div class="crop-wrap"><div class="crop-stage" id="cropStage"><img id="cropImg" alt="หน้าหนังสือ" draggable="false"><div class="crop-rect" id="cropRect" hidden></div></div></div>
+    <div class="row"><button class="btn ghost" id="cropCancel">ยกเลิก</button><button class="btn" id="cropAll">อ่านทั้งภาพ</button><button class="btn primary" id="cropGo" disabled>อ่านเฉพาะในกรอบ</button></div>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -1018,7 +1032,7 @@ function renderPages() {
         <div class="prow"><button class="btn" data-act="img">${p.img ? 'เปลี่ยนภาพ' : 'ใส่ภาพ'}</button>${p.img ? '<button class="btn" data-act="rot">หมุนภาพ</button>' : ''}<input type="file" accept="image/*" hidden data-file="${i}"></div>
       </div>
       <div class="pmain">
-        <div class="prow">${p.img ? `<button class="btn" data-act="ocr">อ่านตัวหนังสือจากภาพ</button>` : ''}</div>
+        <div class="prow">${p.img ? `<button class="btn" data-act="ocr">เลือกบริเวณตัวหนังสือ แล้วอ่าน</button>` : ''}</div>
         <div class="ocrst ${p._ocr ? p._ocr.cls : ''}" data-ocr="${i}">${p._ocr ? esc(p._ocr.msg) : ''}</div>
         <textarea id="pt${i}" rows="3" data-text="${i}" placeholder="พิมพ์คำอ่านของหน้านี้ หรือกด &quot;อ่านตัวหนังสือจากภาพ&quot;">${esc(p.text)}</textarea>
         <div class="preview" data-prev="${i}">${previewHTML(p.text)}</div>
@@ -1058,6 +1072,60 @@ async function saveDraft() {
 const ocrCfg = () => Object.assign({ engine: 'tess', key: '', model: 'gemini-2.5-flash' }, lsGet('tsb-ocr', {}));
 function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
 let tessWorker = null, tessProgress = () => {};
+/* make the page easier for the OCR engine: enlarge small photos, greyscale, stretch contrast */
+function prepForOCR(dataUrl) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const w0 = img.naturalWidth, h0 = img.naturalHeight;
+      const s = Math.min(2.5, Math.max(1, 1800 / Math.max(w0, h0)));
+      const c = document.createElement('canvas'); c.width = Math.round(w0 * s); c.height = Math.round(h0 * s);
+      const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, c.width, c.height);
+      const d = g.getImageData(0, 0, c.width, c.height), px = d.data, hist = new Uint32Array(256);
+      for (let k = 0; k < px.length; k += 4) { const y = (px[k] * 299 + px[k + 1] * 587 + px[k + 2] * 114) / 1000 | 0; px[k] = y; hist[y]++; }
+      const n = px.length / 4; let lo = 0, hi = 255, acc = 0;
+      for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > n * 0.02) { lo = v; break; } }
+      acc = 0; for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > n * 0.02) { hi = v; break; } }
+      const span = Math.max(1, hi - lo);
+      for (let k = 0; k < px.length; k += 4) { const y = Math.max(0, Math.min(255, (px[k] - lo) * 255 / span)); px[k] = px[k + 1] = px[k + 2] = y; }
+      g.putImageData(d, 0, 0); res(c.toDataURL('image/png'));
+    };
+    img.onerror = () => res(dataUrl);
+    img.src = dataUrl;
+  });
+}
+function cropImage(dataUrl, cr) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(cr.w * W)); c.height = Math.max(1, Math.round(cr.h * H));
+      c.getContext('2d').drawImage(img, cr.x * W, cr.y * H, cr.w * W, cr.h * H, 0, 0, c.width, c.height);
+      res(c.toDataURL('image/jpeg', 0.92));
+    };
+    img.onerror = () => res(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/* does a line look like real Thai words rather than OCR noise from a drawing? */
+const lineSeg = (typeof Intl !== 'undefined' && Intl.Segmenter) ? new Intl.Segmenter('th', { granularity: 'word' }) : null;
+function looksLikeThai(line) {
+  const t = line.replace(/\s+/g, '');
+  if (t.length < 2) return false;
+  const thai = (t.match(/[ก-๎]/g) || []).length;
+  if (thai / t.length < 0.75) return false;
+  if (/^[ัิ-ฺ็-๎ะาำๅ]/.test(t)) return false;           // starts with a floating mark
+  if (/[ัิ-ู็-๎]{3,}/.test(t)) return false;                                   // pile of marks
+  if (/[่-๋]{2,}|[เ-ไ]{2,}|[เ-ไ][ะ-ฺๅ็-๎]/.test(t)) return false; // impossible spellings
+  if (lineSeg && t.length >= 4) {
+    const segs = [...lineSeg.segment(t)].filter(x => x.isWordLike);
+    const tiny = segs.filter(x => [...x.segment].length <= 1).length;
+    if (segs.length >= 3 && tiny / segs.length > 0.4) return false;
+  }
+  return true;
+}
+
 async function ocrTesseract(dataUrl, onp) {
   if (!window.Tesseract) { onp('กำลังโหลดตัวอ่านภาพ…'); await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'); }
   tessProgress = onp;
@@ -1065,10 +1133,25 @@ async function ocrTesseract(dataUrl, onp) {
     onp('กำลังโหลดข้อมูลภาษาไทย (ครั้งแรกใช้เวลาสักครู่)…');
     tessWorker = await Tesseract.createWorker('tha', 1, { logger: m => { if (m.status === 'recognizing text') tessProgress('กำลังอ่านตัวหนังสือ ' + Math.round(m.progress * 100) + '%'); } });
   }
-  const r = await tessWorker.recognize(dataUrl);
-  return r.data.text;
+  const r = await tessWorker.recognize(await prepForOCR(dataUrl));
+  const lines = (r.data && r.data.lines) || [];
+  if (!lines.length) return { text: r.data.text || '', dropped: 0 };
+  // keep confident words, then confident lines that read as Thai
+  let cand = lines.map(ln => {
+    const words = (ln.words || []).filter(w => w.confidence >= 55 && w.text.trim());
+    return { text: words.map(w => w.text).join(' ').trim(), conf: ln.confidence, h: ln.bbox ? ln.bbox.y1 - ln.bbox.y0 : 0, y: ln.bbox ? ln.bbox.y0 : 0 };
+  }).filter(l => l.text);
+  const total = lines.length;
+  cand = cand.filter(l => l.conf >= 60 && looksLikeThai(l.text));
+  // story text is set in one size; drop lines far bigger/smaller than the rest (titles drawn in the art, sound effects)
+  if (cand.length >= 3) {
+    const hs = cand.map(l => l.h).sort((a, b) => a - b), med = hs[Math.floor(hs.length / 2)];
+    if (med > 0) cand = cand.filter(l => l.h <= med * 1.8 && l.h >= med * 0.5);
+  }
+  cand.sort((a, b) => a.y - b.y);
+  return { text: cand.map(l => l.text).join('\n'), dropped: total - cand.length };
 }
-const GEM_PROMPT = 'ภาพนี้คือหน้าหนังสือนิทานหรือหนังสือเรียนภาษาไทยสำหรับเด็ก ถอดเฉพาะข้อความเนื้อเรื่องที่ต้องอ่านในภาพออกมาให้ตรงตามตัวสะกดในภาพทุกตัวอักษร คงการขึ้นบรรทัดใหม่ตามหนังสือ ไม่ต้องใส่เลขหน้า หัวกระดาษ หรือคำอธิบายใด ๆ ถ้าไม่มีข้อความให้ตอบว่า (ไม่มีข้อความ)';
+const GEM_PROMPT = 'ภาพนี้คือหน้าหนังสือนิทานภาษาไทยสำหรับเด็ก ถอดเฉพาะ "ข้อความเนื้อเรื่องที่พิมพ์ไว้ให้เด็กอ่าน" ออกมาให้ตรงตามตัวสะกดในภาพทุกตัวอักษร คงการขึ้นบรรทัดใหม่ตามหนังสือ ห้ามใส่ตัวหนังสือที่เป็นส่วนหนึ่งของภาพวาด เช่น ป้าย ฉลาก คำเลียนเสียง ชื่อที่เขียนในภาพ ลายน้ำ โลโก้ หัวกระดาษ และเลขหน้า ห้ามเดาหรือแต่งคำเพิ่ม ถ้าอ่านคำไหนไม่ชัดให้ข้ามคำนั้น ไม่ต้องอธิบายใด ๆ ถ้าไม่มีข้อความเนื้อเรื่องให้ตอบว่า (ไม่มีข้อความ)';
 async function ocrGemini(dataUrl, cfg, onp) {
   onp('กำลังให้ Gemini อ่านภาพ…');
   const mime = dataUrl.slice(5, dataUrl.indexOf(';')), b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
@@ -1080,22 +1163,22 @@ async function ocrGemini(dataUrl, cfg, onp) {
   const j = await r.json();
   const t = ((j.candidates || [])[0] || {}).content;
   const text = t && t.parts ? t.parts.map(p => p.text || '').join('') : '';
-  return /\(ไม่มีข้อความ\)/.test(text) ? '' : text;
+  return { text: /\(ไม่มีข้อความ\)/.test(text) ? '' : text, dropped: 0 };
 }
 function cleanOCR(text) {
   const lines = String(text || '').replace(/\r/g, '').split('\n').map(l => {
-    l = l.replace(/[|_~^`<>{}\[\]\\=@#$%*•■□©®]/g, '').replace(/\s+/g, ' ').trim();
+    l = l.replace(/[|_~^`<>{}\[\]\\=@#$%*•■□©®"“”'‘’]/g, '').replace(/[A-Za-z]+/g, ' ').replace(/\s+/g, ' ').trim();
     const parts = l.split(' ');
     const singles = parts.filter(t => /^[฀-๿]{1,2}$/.test(t)).length;
     if (parts.length > 3 && singles / parts.length > 0.4) l = l.replace(/([฀-๿])\s+(?=[฀-๿])/g, '$1');
     return l;
-  }).filter(l => /[ก-ฮ]/.test(l) && !/^[\d๐-๙\s.\-]+$/.test(l));
+  }).filter(l => /[ก-ฮ]/.test(l) && !/^[\d๐-๙\s.\-]+$/.test(l) && looksLikeThai(l));
   return lines.join('\n').trim();
 }
 async function runOCR(dataUrl, onp) {
   const cfg = ocrCfg();
-  if (cfg.engine === 'gemini' && cfg.key.trim()) return cleanOCR(await ocrGemini(dataUrl, cfg, onp));
-  return cleanOCR(await ocrTesseract(dataUrl, onp));
+  const r = (cfg.engine === 'gemini' && cfg.key.trim()) ? await ocrGemini(dataUrl, cfg, onp) : await ocrTesseract(dataUrl, onp);
+  return { text: cleanOCR(r.text), dropped: r.dropped };
 }
 const OCR_ERR = { key: 'Gemini ไม่รับ API key นี้ ตรวจ key ในโหมดครู > ตั้งค่า', model: 'ไม่พบชื่อโมเดล Gemini นี้ แก้ชื่อโมเดลในการตั้งค่า', quota: 'ใช้ Gemini ครบโควตาแล้ว รอสักครู่แล้วลองใหม่', net: 'เชื่อมต่อไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่' };
 
@@ -1105,33 +1188,66 @@ function setPageOcr(page, cls, msg) {
   const el = $(`[data-ocr="${i}"]`); if (el) { el.className = 'ocrst ' + cls; el.textContent = msg; }
 }
 let ocrChain = Promise.resolve();
-function queueOCR(page) {
+/* opts.force: the teacher asked for it, so replace the text; otherwise never overwrite what they typed */
+function queueOCR(page, opts = {}) {
+  if (!opts.force && page.text.trim()) return;
+  const before = page.text;
   setPageOcr(page, 'busy', 'รอคิวอ่านตัวหนังสือ…');
   ocrChain = ocrChain.then(async () => {
     if (draft.pages.indexOf(page) < 0) return;
     try {
-      const text = await runOCR(page.img, m => setPageOcr(page, 'busy', m));
-      if (!text) { setPageOcr(page, 'err', 'ไม่พบตัวหนังสือในภาพ ลองถ่ายใหม่ให้ตรงและชัด หรือพิมพ์เอง'); return; }
+      const src = opts.crop ? await cropImage(page.img, opts.crop) : page.img;
+      const { text, dropped } = await runOCR(src, m => setPageOcr(page, 'busy', m));
+      if (!opts.force && page.text !== before) { setPageOcr(page, 'ok', 'มีคำอ่านที่ครูใส่ไว้แล้ว ระบบไม่เขียนทับ'); return; }
+      if (!text) { setPageOcr(page, 'err', 'ไม่พบตัวหนังสือที่อ่านได้ชัด กด "เลือกบริเวณตัวหนังสือ" แล้วลากกรอบเฉพาะข้อความ หรือพิมพ์เอง'); return; }
       page.text = text;
       const i = draft.pages.indexOf(page);
       const ta = $('#pt' + i); if (ta) { ta.value = text; $(`[data-prev="${i}"]`).innerHTML = previewHTML(text); }
-      setPageOcr(page, 'ok', 'อ่านเสร็จแล้ว ตรวจคำให้ตรงกับในภาพอีกครั้ง แก้ได้ในช่องด้านล่าง');
+      setPageOcr(page, 'ok', (dropped > 0 ? 'ตัดตัวหนังสือที่อยู่ในภาพวาดหรืออ่านไม่ชัดออกแล้ว ' : 'อ่านเสร็จแล้ว ') + 'ตรวจคำอีกครั้ง ถ้ายังมีคำแปลก ๆ กด "เลือกบริเวณตัวหนังสือ"');
     } catch (e) {
       setPageOcr(page, 'err', OCR_ERR[e.message] || 'อ่านตัวหนังสือไม่สำเร็จ ลองกดอ่านใหม่ หรือพิมพ์เอง');
     }
   });
 }
+
+/* ---- choose the text area on a page photo ---- */
+let cropPage = null, cropSel = null, cropDrag = null;
+function openCrop(page) {
+  cropPage = page; cropSel = page.crop || null;
+  $('#cropImg').src = page.img; $('#cropModal').hidden = false; drawCrop();
+}
+function closeCrop() { $('#cropModal').hidden = true; cropPage = null; cropDrag = null; }
+function drawCrop() {
+  const r = $('#cropRect');
+  $('#cropGo').disabled = !cropSel;
+  if (!cropSel) { r.hidden = true; return; }
+  r.hidden = false;
+  Object.assign(r.style, { left: cropSel.x * 100 + '%', top: cropSel.y * 100 + '%', width: cropSel.w * 100 + '%', height: cropSel.h * 100 + '%' });
+}
+(function initCrop() {
+  const st = $('#cropStage'), cl = v => Math.max(0, Math.min(1, v));
+  const pos = e => { const b = st.getBoundingClientRect(); return { x: cl((e.clientX - b.left) / b.width), y: cl((e.clientY - b.top) / b.height) }; };
+  st.addEventListener('pointerdown', e => { const p = pos(e); cropDrag = p; cropSel = { x: p.x, y: p.y, w: 0, h: 0 }; try { st.setPointerCapture(e.pointerId); } catch (_) {} drawCrop(); e.preventDefault(); });
+  st.addEventListener('pointermove', e => { if (!cropDrag) return; const p = pos(e); cropSel = { x: Math.min(p.x, cropDrag.x), y: Math.min(p.y, cropDrag.y), w: Math.abs(p.x - cropDrag.x), h: Math.abs(p.y - cropDrag.y) }; drawCrop(); });
+  const end = () => { if (!cropDrag) return; cropDrag = null; if (cropSel && (cropSel.w < 0.03 || cropSel.h < 0.02)) cropSel = null; drawCrop(); };
+  st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
+  $('#cropCancel').onclick = closeCrop;
+  $('#cropAll').onclick = () => { const p = cropPage; p.crop = null; closeCrop(); queueOCR(p, { force: true }); };
+  $('#cropGo').onclick = () => { const p = cropPage, c = cropSel; p.crop = c; closeCrop(); queueOCR(p, { force: true, crop: c }); };
+  $('#cropModal').addEventListener('click', e => { if (e.target.id === 'cropModal') closeCrop(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#cropModal').hidden) closeCrop(); });
+})();
 async function addImages(files, ocrIt) {
   files = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   if (!files.length) return;
   toast('กำลังใส่ภาพ ' + files.length + ' หน้า…', 6000);
-  let k = draft.pages.findIndex(p => !p.img && !p.text.trim()); if (k < 0) k = draft.pages.length;
+  let k = draft.pages.findIndex(p => !p.img); if (k < 0) k = draft.pages.length;
   const added = [];
   for (const f of files) {
     try { const img = await compressImage(f); if (k < draft.pages.length) draft.pages[k].img = img; else draft.pages.push({ img, text: '' }); added.push(draft.pages[k]); k++; } catch (err) {}
   }
   renderPages();
-  if (ocrIt) added.forEach(queueOCR);
+  if (ocrIt) added.forEach(p => queueOCR(p));
   toast('ใส่ภาพแล้ว ' + added.length + ' หน้า');
   const last = draft.pages.indexOf(added[added.length - 1]); const el = $(`[data-pi="${last}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -1261,7 +1377,7 @@ $('#edPages').addEventListener('click', e => {
   const card = b.closest('[data-pi]'); const i = +card.dataset.pi; const act = b.dataset.act;
   if (act === 'img') card.querySelector('input[type=file]').click();
   if (act === 'rot') { rotateDataUrl(draft.pages[i].img).then(u => { draft.pages[i].img = u; renderPages(); }); }
-  if (act === 'ocr') queueOCR(draft.pages[i]);
+  if (act === 'ocr') openCrop(draft.pages[i]);
   if (act === 'up' && i > 0) { [draft.pages[i - 1], draft.pages[i]] = [draft.pages[i], draft.pages[i - 1]]; renderPages(); }
   if (act === 'down' && i < draft.pages.length - 1) { [draft.pages[i + 1], draft.pages[i]] = [draft.pages[i], draft.pages[i + 1]]; renderPages(); }
   if (act === 'del') {
