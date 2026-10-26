@@ -232,6 +232,68 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
 .ocrst.err{color:var(--coral)}
 .ocrst.ok{color:var(--leaf)}
 
+.chip.f{border-top:3px solid #f59e0b}
+.chip.b{border-top:3px solid #b7c2d0;background:#f7f9fc}
+.chip.s{border-top:3px solid var(--teal);background:#effaf8}
+.chip.gap{margin-left:18px}
+
+/* ---------- adaptive layout: phones, tablets, laptops, projectors ---------- */
+.btn,.w,.mic,.chip{touch-action:manipulation}
+.btn{min-height:44px}
+.book-tools .btn,.prow .btn{min-height:36px}
+/* below laptop width: one column, picture shorter, mic dock stays under the thumb */
+@media (max-width:899px){
+  .storytext{font-size:clamp(26px,7vw,42px);line-height:2}
+  .pic img{max-height:34vh}
+  .textcard{padding:16px}
+  .textcard .controls{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5;background:rgba(246,248,251,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:var(--shadow)}
+}
+/* phones upright */
+@media (max-width:560px){
+  .brand p{display:none}
+  .top{margin-bottom:14px;padding-block:8px}
+  .rbar{gap:8px}
+  .rbar h2{flex-basis:100%;order:-1;font-size:20px}
+  .mic{width:62px;height:62px}.mic svg{width:28px;height:28px}
+  .mic-label{font-size:15px}.mic-label small{display:none}
+  #btnListen span{display:none}
+  .legend span{display:none}
+  .helpcard{padding:14px}
+  .helpword{flex-basis:100%}
+  .helpcard .row .btn{flex:1 1 40%}
+  .chip{min-width:52px;padding:6px 8px}.chip b{font-size:25px}.chip span{font-size:11px}
+  .chip.gap{margin-left:10px}
+  .tutor .owl{width:44px;height:44px}
+  .bubble{font-size:14px}
+  .controls[style]{gap:8px}
+  .controls[style] .btn{padding:10px 12px;font-size:14px}
+  .shelf{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .book .t{font-size:15px}.book .meta{padding:10px 12px}
+}
+/* phones turned sideways: picture left, text right, nothing taller than the screen */
+@media (orientation:landscape) and (max-height:520px){
+  .spread{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);align-items:start}
+  .pic{position:sticky;top:calc(60px + env(safe-area-inset-top,0px));padding:8px}
+  .pic img{max-height:calc(100vh - 110px)}
+  .storytext{font-size:clamp(22px,3.6vw,32px);line-height:1.9}
+  .textcard .controls{position:static}
+  .top{padding-block:6px;margin-bottom:10px}
+  .hero{padding:16px 20px}.hero .owl{width:64px;height:64px}
+  .tutor{margin-bottom:2px}
+}
+/* tablets upright */
+@media (min-width:700px) and (orientation:portrait){
+  .pic img{max-height:38vh}
+  .storytext{font-size:clamp(34px,5.2vw,50px)}
+}
+/* big screens and classroom projectors */
+@media (min-width:1500px){
+  .wrap{max-width:1440px}
+  body{font-size:17px}
+  .storytext{font-size:clamp(44px,2.9vw,64px)}
+  .pic img{max-height:64vh}
+}
+
 /* confetti */
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:3px;animation:fall 1.8s ease-in forwards}
@@ -333,7 +395,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
           <span><i style="background:var(--amber-bg)"></i>อ่านถูกเมื่อมีคนช่วย</span>
           <span><i style="background:var(--coral-bg)"></i>ลองอ่านอีกครั้ง</span>
           <span><i style="box-shadow:inset 0 -4px 0 var(--sun);background:#fff"></i>คำถัดไป</span>
-          <label class="autohelp" for="autoHelp"><input type="checkbox" id="autoHelp">พี่ฮูกสะกดให้ฟังอัตโนมัติเมื่ออ่านไม่ได้</label>
+          <label class="autohelp" for="autoHelp"><input type="checkbox" id="autoHelp">พี่ฮูกสะกดให้ฟังเองเมื่ออ่านผิด 3 ครั้ง</label>
         </div>
       </div>
     </div>
@@ -499,12 +561,71 @@ function parseSpellMap(text) {
   String(text || '').split('\n').forEach(l => { const i = l.indexOf('='); if (i < 0) return; const k = l.slice(0, i).trim(); const v = l.slice(i + 1).trim(); if (k && v) m[norm(k)] = v.split(/\s*-\s*/).filter(Boolean); });
   return m;
 }
+/* ---- Thai phonics spelling (แจกลูกสะกดคำ): initial consonant → vowel → final → tone mark → syllable ---- */
+const INIT_OPTS = ['ห[งญนมยรลว]', 'อย', '[กขคตปผพฟบด][รลว]', '[ก-ฮ]'];
+// [template, vowel shown, vowel spoken, note]   I = initial, F = final consonant, F? = optional final
+const VTPL = [
+  ['เIียะ', 'เ-ียะ', 'เอียะ'], ['เIียF?', 'เ-ีย', 'เอีย'], ['เIือะ', 'เ-ือะ', 'เอือะ'], ['เIือF?', 'เ-ือ', 'เอือ'],
+  ['Iัวะ', '-ัวะ', 'อัวะ'], ['IัวF?', '-ัว', 'อัว'], ['เIาะ', 'เ-าะ', 'เอาะ'], ['เIา', 'เ-า', 'เอา'],
+  ['เIอะ', 'เ-อะ', 'เออะ'], ['เIอ', 'เ-อ', 'เออ'], ['เIิF', 'เ-ิ', 'เออ', 'เปลี่ยนรูป'], ['เI็F', 'เ-็', 'เอะ', 'เปลี่ยนรูป'], ['เIะ', 'เ-ะ', 'เอะ'], ['เIF?', 'เ-', 'เอ'],
+  ['แI็F', 'แ-็', 'แอะ', 'เปลี่ยนรูป'], ['แIะ', 'แ-ะ', 'แอะ'], ['แIF?', 'แ-', 'แอ'], ['โIะ', 'โ-ะ', 'โอะ'], ['โIF?', 'โ-', 'โอ'],
+  ['ไIF?', 'ไ-', 'ไอ'], ['ใI', 'ใ-', 'ใอ'], ['Iำ', '-ำ', 'อำ'], ['IัF', '-ั', 'อะ', 'เปลี่ยนรูป'], ['Iะ', '-ะ', 'อะ'], ['IาF?', '-า', 'อา'],
+  ['IิF?', '-ิ', 'อิ'], ['IีF?', '-ี', 'อี'], ['IึF?', '-ึ', 'อึ'], ['Iือ', '-ือ', 'อือ'], ['IืF', '-ื', 'อือ', 'ลดรูป'], ['IุF?', '-ุ', 'อุ'], ['IูF?', '-ู', 'อู'],
+  ['I็อF', '-็อ', 'เอาะ', 'เปลี่ยนรูป'], ['IอF?', '-อ', 'ออ'], ['IวF', '-ว-', 'อัว', 'ลดรูป'], ['IF', 'โ-ะ', 'โอะ', 'ลดรูป'], ['I', '-ะ', 'อะ', 'ลดรูป']
+];
+const SYL_RX = [];
+VTPL.forEach((v, vi) => INIT_OPTS.forEach((ini, ii) => {
+  const src = v[0].replace('I', '(?<i>' + ini + ')').replace('F?', '(?<f>[ก-ฮ])?').replace('F', '(?<f>[ก-ฮ])') + '(?<k>(?:[ก-ฮ]{1,2}[ิุ]?์)?)';
+  SYL_RX.push({ re: new RegExp(src, 'y'), vd: v[1], vs: v[2], note: v[3] || '', order: vi * 10 + ii });
+}));
+function syllabify(s) {
+  const memo = new Map();
+  function go(i) {
+    if (i === s.length) return [];
+    if (memo.has(i)) return memo.get(i);
+    const cands = [];
+    for (const r of SYL_RX) { r.re.lastIndex = i; const m = r.re.exec(s); if (m && m[0].length) cands.push({ len: m[0].length, m, r }); }
+    cands.sort((a, b) => b.len - a.len || a.r.order - b.r.order);
+    for (const c of cands) {
+      const rest = go(i + c.len);
+      if (rest) { const g = c.m.groups; const res = [{ start: i, end: i + c.len, init: g.i, fin: g.f || '', vd: c.r.vd, vs: c.r.vs, note: c.r.note }, ...rest]; memo.set(i, res); return res; }
+    }
+    memo.set(i, null); return null;
+  }
+  return go(0);
+}
+function thaiSpell(word) {
+  const w = String(word).replace(/[\/ๆ\s]/g, '');
+  if (!/^[ก-๎]+$/.test(w)) return null;
+  let t = ''; const map = [], tones = [];
+  for (let idx = 0; idx < w.length; idx++) { const ch = w[idx]; if ('่้๊๋'.includes(ch)) tones.push({ at: t.length, ch }); else { map.push(idx); t += ch; } }
+  const syl = syllabify(t); if (!syl || !syl.length) return null;
+  const parts = [];
+  syl.forEach((s, si) => {
+    const tone = tones.find(x => x.at - 1 >= s.start && x.at - 1 < s.end);
+    const orig = w.slice(map[s.start], s.end < t.length ? map[s.end] : w.length);
+    const base = t.slice(s.start, s.end);
+    parts.push({ show: s.init, say: s.init === 'อย' ? 'ยอ' : s.init + 'อ', label: 'พยัญชนะต้น', kind: 'c', sy: si });
+    parts.push({ show: s.vd, say: s.vs, label: 'สระ' + s.vs + (s.note ? ' ' + s.note : ''), kind: 'v', sy: si });
+    if (s.fin) parts.push({ show: s.fin, say: s.fin + 'อ', label: 'ตัวสะกด', kind: 'f', sy: si });
+    if (tone) {
+      parts.push({ show: base, say: base, label: 'อ่านก่อนใส่วรรณยุกต์', kind: 'b', sy: si });
+      parts.push({ show: '◌' + tone.ch, say: TONE[tone.ch], label: TONE[tone.ch], kind: 't', sy: si });
+    }
+    parts.push({ show: orig, say: orig, label: syl.length > 1 ? 'พยางค์ที่ ' + (si + 1) : 'อ่านว่า', kind: syl.length > 1 ? 's' : 'whole', sy: si });
+  });
+  if (syl.length > 1) parts.push({ show: w, say: w, label: 'อ่านว่า', kind: 'whole', sy: -1 });
+  return parts;
+}
+
 function spellParts(word, map) {
   const key = norm(word);
   if (map && map[key]) {
     const arr = map[key];
     return arr.map((s, i) => ({ show: s, say: s, label: i === arr.length - 1 ? 'อ่านว่า' : '', kind: i === arr.length - 1 ? 'whole' : 'c' }));
   }
+  const phon = thaiSpell(word);
+  if (phon) return phon;
   const chars = [...key];
   const ordered = [];
   for (let i = 0; i < chars.length; i++) {
@@ -616,7 +737,7 @@ function onResult(e) {
 }
 
 /* ================= reader state ================= */
-const cur = { book: null, p: 0, tokens: [], status: [], tent: new Set(), helped: new Set(), stats: [], helpIdx: -1, spellMap: {}, readingAlong: false, score: 0, streak: 0, pops: [], talking: false, readingIdx: -1 };
+const cur = { book: null, p: 0, tokens: [], status: [], tent: new Set(), helped: new Set(), stats: [], helpIdx: -1, spellMap: {}, readingAlong: false, score: 0, streak: 0, pops: [], talking: false, readingIdx: -1, wrongN: {} };
 
 function cursorIdx() { for (let i = 0; i < cur.tokens.length; i++) if (cur.tokens[i].readable && !/^ok/.test(cur.status[i])) return i; return -1; }
 
@@ -641,7 +762,7 @@ function handleFinal(alts) {
   if (nowIdx < 0) { finalBuf = ''; cur.tent = new Set(); renderText(); flushPops(); return pageComplete(); }
   const want = cur.tokens[nowIdx].n;
   if (rem && want.startsWith(rem)) finalBuf = rem;                 // half a word so far, wait for the rest
-  else if ((best.matched.length === 0 && rem.length >= 2) || rem.length >= 3) { finalBuf = ''; markWrong(nowIdx); }
+  else if (rem.length >= 3 && !/^(อืม|อือ|เอ่อ|เออ|อ่า|อา|เอ)+$/.test(rem)) { finalBuf = ''; markWrong(nowIdx); }
   else finalBuf = '';
   if (best.matched.length) { sndOk(); if (cur.helpIdx >= 0 && /^ok/.test(cur.status[cur.helpIdx])) closeHelp(); }
   cur.tent = new Set(); renderText(); flushPops();
@@ -667,16 +788,22 @@ function markOk(i) {
 }
 function markWrong(i) {
   if (/^ok/.test(cur.status[i])) return;
-  cur.status[i] = 'wrong'; cur.stats[cur.p].wrongs++; cur.streak = 0; sndOops();
+  cur.status[i] = 'wrong'; cur.streak = 0; sndOops();
   lastProgress = Date.now();
+  const tries = (cur.wrongN[i] || 0) + 1; cur.wrongN[i] = tries;
+  if (tries === 1) cur.stats[cur.p].wrongs++;
   const w = cur.tokens[i].t.replace(/\//g, '');
-  if (autoHelp) {
-    openHelp(i, 'ฟังพี่ฮูกสะกดนะ แล้วอ่านตาม');
-    tutorSay('คำว่า "' + w + '" ยังไม่ถูกนะ ฟังพี่สะกดให้ฟัง', 'oops');
-    setTimeout(doSpell, 500);
+  if (tries === 1) {
+    // first slip: let the child try again on their own
+    tutorSay('เกือบแล้ว ลองอ่านคำว่า "' + w + '" อีกครั้งนะ', 'oops');
+    renderText();
+  } else if (tries === 2 || !autoHelp) {
+    openHelp(i, 'ลองอีกครั้ง หรือกด "ช่วยสะกดคำ" / "ช่วยอ่าน" ถ้าอยากให้พี่ช่วย');
+    tutorSay('ยังไม่ตรงนะ ลองใหม่ได้ ถ้าอยากให้พี่ช่วย กดปุ่มด้านล่างเลย', 'oops');
   } else {
-    openHelp(i, 'ยังไม่ใช่นะ ลองอ่านคำนี้อีกครั้ง หรือกดปุ่มให้ช่วย');
-    tutorSay('ลองอ่านคำนี้อีกครั้งนะ ใช้ปุ่มช่วยได้', 'oops');
+    openHelp(i, 'ฟังพี่ฮูกสะกดนะ แล้วอ่านตาม');
+    tutorSay('คำว่า "' + w + '" ยากหน่อย ฟังพี่สะกดให้ฟังนะ', 'oops');
+    setTimeout(doSpell, 500);
   }
 }
 
@@ -703,7 +830,7 @@ function loadPage(i) {
   cur.tokens = tokenize(pg.text);
   const done = cur.stats[cur.p].done;
   cur.status = cur.tokens.map(t => t.readable ? (done ? 'ok' : 'todo') : 'skip');
-  cur.helped = new Set(); cur.tent = new Set(); cur.readingIdx = -1;
+  cur.helped = new Set(); cur.tent = new Set(); cur.readingIdx = -1; cur.wrongN = {};
   $('#rPic').innerHTML = pg.img ? `<img src="${pg.img}" alt="ภาพประกอบหน้า ${cur.p + 1}">` : '<div class="noimg">หน้านี้ไม่มีภาพ</div>';
   $('#rPager').textContent = `หน้า ${cur.p + 1} / ${pages.length}`;
   $('#rDots').innerHTML = pages.map((_, k) => `<span class="dot${k === cur.p ? ' on' : ''}${cur.stats[k].done && k !== cur.p ? ' done' : ''}"></span>`).join('');
@@ -769,7 +896,7 @@ async function spellSeq() {
   const i = cur.helpIdx; if (i < 0) return; noteHelp(i);
   stopSpeech(); const my = ++speakToken;
   const parts = spellParts(cur.tokens[i].t, cur.spellMap);
-  $('#spellBox').innerHTML = parts.map((p, k) => `<div class="chip ${p.kind}" data-k="${k}"><b>${esc(p.show)}</b><span>${esc(p.label)}</span></div>`).join('');
+  $('#spellBox').innerHTML = parts.map((p, k) => `<div class="chip ${p.kind}${k > 0 && p.sy !== undefined && p.sy !== parts[k - 1].sy ? ' gap' : ''}" data-k="${k}"><b>${esc(p.show)}</b><span>${esc(p.label)}</span></div>`).join('');
   const chips = [...$('#spellBox').children];
   for (let k = 0; k < parts.length; k++) {
     if (my !== speakToken) return;
@@ -801,7 +928,18 @@ function stopReadAlong() { if (!cur.readingAlong && cur.readingIdx < 0) return; 
 let books = [], teacher = lsGet('tsb-teacher', false);
 function show(v) { ['vLib', 'vRead', 'vEdit'].forEach(id => $('#' + id).hidden = id !== v); window.scrollTo(0, 0); }
 
+/* keep tablets/phones awake while a book is open */
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && navigator.wakeLock && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+    if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && cur.book) keepAwake(true); });
+
 function openBook(book) {
+  keepAwake(true);
   cur.book = book; cur.spellMap = parseSpellMap(book.spell);
   cur.stats = book.pages.map(() => ({ done: false, helps: 0, wrongs: 0 }));
   cur.score = 0; cur.streak = 0; cur.pops = [];
@@ -813,7 +951,7 @@ function openBook(book) {
   else if (tts && !thVoice) setTimeout(() => { if (!thVoice) showNotice('เครื่องนี้ยังไม่มีเสียงอ่านภาษาไทย ปุ่ม "ช่วยอ่าน" อาจไม่มีเสียง (ติดตั้งเสียงไทยในการตั้งค่าเครื่อง)'); }, 1500);
   show('vRead'); loadPage(0);
 }
-function leaveReader() { stopListening(); stopReadAlong(); stopSpeech(); closeHelp(); cur.book = null; show('vLib'); renderShelf(); }
+function leaveReader() { keepAwake(false); stopListening(); stopReadAlong(); stopSpeech(); closeHelp(); cur.book = null; show('vLib'); renderShelf(); }
 
 function renderShelf() {
   $('#teacherBar').hidden = !teacher;
@@ -1028,11 +1166,11 @@ let autoHelp = lsGet('tsb-autohelp', true), lastProgress = 0;
 setInterval(() => {
   if (!listening || cur.talking || !autoHelp || !cur.book) return;
   const i = cursorIdx(); if (i < 0) return;
-  if (Date.now() - lastProgress > 9000) {
+  // quiet for 20 s: only offer help, never speak over the child
+  if (Date.now() - lastProgress > 20000 && cur.helpIdx !== i) {
     lastProgress = Date.now();
-    openHelp(i, 'ติดคำนี้อยู่ใช่ไหม ฟังพี่ฮูกสะกดนะ');
-    tutorSay('ติดคำว่า "' + cur.tokens[i].t.replace(/\//g, '') + '" ใช่ไหม ฟังพี่สะกดให้นะ', 'oops');
-    doSpell();
+    openHelp(i, 'ถ้าอ่านคำนี้ไม่ได้ กด "ช่วยสะกดคำ" หรือ "ช่วยอ่าน" ได้เลย');
+    tutorSay('ค่อย ๆ อ่านนะ ถ้าติดคำว่า "' + cur.tokens[i].t.replace(/\//g, '') + '" กดให้พี่ช่วยได้');
   }
 }, 1000);
 
