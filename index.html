@@ -323,6 +323,11 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
 .w.magic{animation:magicglow .8s ease-out}
 @keyframes magicglow{0%{box-shadow:0 0 0 0 rgba(255,176,32,.0)}30%{box-shadow:0 0 0 6px rgba(255,176,32,.35),0 0 24px 6px rgba(24,195,165,.45);transform:scale(1.08)}100%{box-shadow:0 0 0 0 rgba(255,176,32,0);transform:none}}
 
+.mic{--lvl:0}
+.mic.live.meter::before{animation:none;transform:scale(calc(1 + var(--lvl) * .75));opacity:calc(.25 + var(--lvl) * .75);transition:transform .08s linear,opacity .08s linear;border-width:3px}
+.mic.live.meter::after{animation:none;opacity:0}
+.heard.ignored{color:var(--ink-faint);text-decoration:line-through}
+
 /* confetti */
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:3px;animation:fall 1.8s ease-in forwards}
@@ -383,6 +388,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
           <label class="f" for="voiceRate">ความเร็วในการพูด <small id="rateTxt"></small><input type="range" id="voiceRate" min="0.6" max="1.3" step="0.05"></label>
           <label class="f" for="strictSel">การตรวจเสียงอ่านของนักเรียน <small>ปกติ = ต้องออกเสียงและวรรณยุกต์ถูก ถ้าเพี้ยนเล็กน้อยพี่ฮูกจะบอกว่า "เกือบแล้ว" ให้อ่านใหม่</small>
             <select id="strictSel"><option value="easy">ผ่อนปรน (สำหรับเด็กที่เพิ่งเริ่ม)</option><option value="normal">ปกติ</option><option value="strict">เข้มงวด (ต้องอ่านชัดมาก)</option></select></label>
+          <label class="opt" for="noiseCut"><input type="checkbox" id="noiseCut"><span>ตัดเสียงรบกวน<small>กรองเสียงรอบข้าง ไม่นับเสียงคุยที่อยู่ไกล หรือคำที่ไม่เกี่ยวกับเนื้อเรื่อง</small></span></label>
           <div class="prow"><button class="btn" id="voiceTest">ลองฟัง: สะกดคำว่า "ข้าว"</button><button class="btn" id="voiceClear">ล้างเสียงที่เก็บไว้</button></div>
         </div>
       </details>
@@ -553,7 +559,28 @@ const segmenter = (typeof Intl !== 'undefined' && Intl.Segmenter) ? new Intl.Seg
 const READABLE = /[ก-ฮะ-๎A-Za-z0-9๐-๙]/;
 const TONES = /[่-์็]/g; // ่ ้ ๊ ๋ ์ ็
 
-function norm(s) { return String(s).toLowerCase().replace(/[\s​‌‍.,!?"'“”‘’()\[\]{}\-:;…ฯ/]/g, '').replace(/ๆ/g, ''); }
+/* numbers: "3", "๓" and "สาม" are the same word when reading aloud */
+const TH_DIG = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+const TH_UNIT = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน'];
+function numToThai(str) {
+  let n = String(str).replace(/[๐-๙]/g, d => '๐๑๒๓๔๕๖๗๘๙'.indexOf(d)).replace(/,/g, '');
+  if (!/^\d+$/.test(n)) return str;
+  n = n.replace(/^0+(?=\d)/, '');
+  if (n === '0') return 'ศูนย์';
+  if (n.length > 6) { const hi = n.slice(0, -6), lo = n.slice(-6); return numToThai(hi) + 'ล้าน' + (/^0+$/.test(lo) ? '' : numToThai(lo)); }
+  let out = '';
+  for (let i = 0; i < n.length; i++) {
+    const d = +n[i], pos = n.length - 1 - i;
+    if (!d) continue;
+    if (pos === 1 && d === 1) out += 'สิบ';
+    else if (pos === 1 && d === 2) out += 'ยี่สิบ';
+    else if (pos === 0 && d === 1 && n.length > 1) out += 'เอ็ด';
+    else out += TH_DIG[d] + TH_UNIT[pos];
+  }
+  return out;
+}
+const isNumber = t => /^[\d๐-๙][\d๐-๙,]*$/.test(String(t).trim());
+function norm(s) { return String(s).toLowerCase().replace(/[\d๐-๙][\d๐-๙,]*/g, m => numToThai(m)).replace(/[\s​‌‍.,!?"'“”‘’()\[\]{}\-:;…ฯ/]/g, '').replace(/ๆ/g, ''); }
 function loose(s) { return s.replace(TONES, ''); }
 
 function tokenize(text) {
@@ -580,6 +607,7 @@ function tokenize(text) {
     const base = norm(tk.t);
     tk.n = base;
     tk.alts = /ๆ/.test(tk.t) ? [base + base, base] : [base];
+    if (isNumber(tk.t) && /^หนึ่ง(ร้อย|พัน|หมื่น|แสน|ล้าน)/.test(base)) tk.alts.push(base.slice(5));   // 100 said as "ร้อย"
   });
   return out;
 }
@@ -764,6 +792,12 @@ function thaiSpell(word) {
   return parts;
 }
 function spellParts(word, map) {
+  if (isNumber(word)) {
+    const th = numToThai(word.trim());
+    const inner = (thaiSpell(th) || []).filter(p => p.kind !== 'whole');
+    return [{ show: word.trim(), say: th, label: 'ตัวเลข อ่านว่า ' + th, kind: 'b', sy: -2 }, ...inner,
+            { show: word.trim(), say: th, label: 'อ่านว่า ' + th, kind: 'whole', sy: -1 }];
+  }
   const key = norm(word);
   if (map && map[key]) {
     const arr = map[key];
@@ -1027,6 +1061,78 @@ function showHqStatus() {
 }
 function stopSpeech() { speakToken++; if (hqSrc) { try { hqSrc.stop(); } catch (e) {} hqSrc = null; hqPlaying = false; } if (tts && (tts.speaking || tts.pending)) { tts.cancel(); lastCancel = Date.now(); } }
 
+/* ================= noise handling =================
+   1) the microphone is opened with the browser's noise suppression and echo cancellation, and that cleaned-up
+      track is handed to speech recognition where the browser supports it;
+   2) a loudness meter learns the room's background level; speech that is not clearly louder than the room
+      (people talking further away) is not counted as a wrong reading;
+   3) heard words that look nothing like the words on the page are ignored. */
+let noiseCut = lsGet('tsb-noisecut', true);
+let micStream = null, micTrack = null, micAnalyser = null, micTimer = null, micBroken = false;
+const levels = [];                      // [time, dBFS]
+async function startMeter() {
+  if (!noiseCut || micBroken || micStream || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return null;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: false, channelCount: 1 } });
+    micTrack = micStream.getAudioTracks()[0];
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const src = actx.createMediaStreamSource(micStream);
+    micAnalyser = actx.createAnalyser(); micAnalyser.fftSize = 1024; src.connect(micAnalyser);
+    const buf = new Float32Array(micAnalyser.fftSize);
+    micTimer = setInterval(() => {
+      micAnalyser.getFloatTimeDomainData(buf);
+      let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      const db = 10 * Math.log10(sum / buf.length + 1e-10), now = Date.now();
+      levels.push([now, db]); while (levels.length && now - levels[0][0] > 8000) levels.shift();
+      const floor = noiseFloor(), lvl = Math.max(0, Math.min(1, (db - floor - 6) / 30));
+      const m = document.getElementById('btnMic'); if (m) m.style.setProperty('--lvl', lvl.toFixed(2));
+    }, 60);
+    document.getElementById('btnMic').classList.add('meter');
+    return micTrack;
+  } catch (e) { stopMeter(); return null; }
+}
+function stopMeter() {
+  clearInterval(micTimer); micTimer = null; micAnalyser = null;
+  if (micStream) micStream.getTracks().forEach(t => t.stop());
+  micStream = null; micTrack = null; levels.length = 0;
+  const m = document.getElementById('btnMic'); if (m) { m.classList.remove('meter'); m.style.removeProperty('--lvl'); }
+}
+function noiseFloor() {
+  if (levels.length < 10) return -60;
+  const v = levels.map(x => x[1]).sort((a, b) => a - b);
+  return v[Math.floor(v.length * 0.15)];
+}
+// was there a clearly-near voice in the last few seconds? (true when we cannot measure)
+function voiceWasNear() {
+  if (!micTimer || levels.length < 15) return true;
+  const now = Date.now(), recent = levels.filter(x => now - x[0] < 3000).map(x => x[1]);
+  if (!recent.length) return true;
+  const peak = Math.max(...recent);
+  return peak > noiseFloor() + 14 && peak > -52;
+}
+// how much does what was heard resemble the next few words on the page? 0..1
+function relevance(heard, idx) {
+  const h = loose(heard); let best = 0, n = 0;
+  for (let i = idx; i < cur.tokens.length && n < 3; i++) {
+    const tk = cur.tokens[i]; if (!tk.readable || /^ok/.test(cur.status[i])) continue; n++;
+    for (const w of tk.alts) { const lw = loose(w); for (const L of [lw.length - 1, lw.length, lw.length + 1, lw.length + 2]) if (L > 0) best = Math.max(best, levRatio(h.slice(0, L), lw)); }
+  }
+  return best;
+}
+// talk that is not an attempt at the next words: long chatter, or a sound unlike any of the next words
+function unrelated(heard, idx) {
+  const r = relevance(heard, idx);
+  let span = 0, n = 0;
+  for (let i = idx; i < cur.tokens.length && n < 3; i++) { const tk = cur.tokens[i]; if (!tk.readable || /^ok/.test(cur.status[i])) continue; n++; span += tk.n.length; }
+  if (heard.length > span * 1.5 + 4) return r < 0.6;
+  return r < 0.4;
+}
+function showIgnored(t) {
+  const el = $('#rHeard'); el.textContent = 'ไม่นับเสียงรอบข้าง: ' + String(t).slice(0, 30);
+  el.classList.add('ignored'); clearTimeout(showIgnored._t); showIgnored._t = setTimeout(() => el.classList.remove('ignored'), 1500);
+}
+
 /* ================= speech recognition ================= */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 let rec = null, listening = false, recPaused = false, finalBuf = '';
@@ -1040,9 +1146,10 @@ function startRec() {
   rec.onerror = e => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { listening = false; updateMicUI(); showNotice('ยังไม่ได้อนุญาตให้ใช้ไมโครโฟน กดรูปกุญแจ/ไมค์ที่แถบที่อยู่เว็บ แล้วเลือก "อนุญาต"'); }
     else if (e.error === 'network') { showNotice('การฟังเสียงต้องต่ออินเทอร์เน็ต ตรวจสอบสัญญาณแล้วกดไมค์อีกครั้ง'); }
+    else if (e.error === 'audio-capture' && micStream) { micBroken = true; stopMeter(); }   // this device cannot share the mic: listen without the meter
   };
   rec.onend = () => { if (listening && !recPaused) setTimeout(() => { if (listening && !recPaused) startRec(); }, 150); };
-  try { rec.start(); } catch (e) {}
+  try { if (micTrack && micTrack.readyState === 'live') rec.start(micTrack); else rec.start(); } catch (e) { try { rec.start(); } catch (_) {} }
 }
 function pauseRecForSpeech() {
   if (!listening || recPaused) return;
@@ -1050,15 +1157,17 @@ function pauseRecForSpeech() {
   const check = () => { if (cur.talking || hqPlaying || (tts && (tts.speaking || tts.pending))) { setTimeout(check, 250); return; } recPaused = false; if (listening) startRec(); };
   setTimeout(check, 400);
 }
-function startListening() {
+async function startListening() {
   if (!SR) { showNotice('อุปกรณ์หรือเบราว์เซอร์นี้ยังฟังเสียงพูดไม่ได้ กรุณาเปิดด้วย Google Chrome (ยังใช้ปุ่มฟัง/ช่วยอ่านได้ตามปกติ)'); return; }
   stopReadAlong(); stopSpeech();
-  listening = true; recPaused = false; finalBuf = ''; lastProgress = Date.now(); startRec(); updateMicUI();
+  listening = true; recPaused = false; finalBuf = ''; lastProgress = Date.now(); updateMicUI();
+  startMeter().finally(() => { if (listening) startRec(); });
   if (cur.book) tutorSay('พี่ฮูกฟังอยู่นะ อ่านคำที่ลูกบอลเด้งอยู่ได้เลย');
 }
 function stopListening() {
   listening = false; recPaused = false; finalBuf = '';
   try { if (rec) { rec.onend = null; rec.abort(); } } catch (e) {}
+  stopMeter();
   rec = null; cur.tent = new Set(); updateMicUI(); if (cur.book) renderText();
 }
 function updateMicUI() {
@@ -1135,6 +1244,7 @@ function handleFinal(alts, conf, prior = '') {
   }
   best.matched.forEach(markOk);
   if (revised && !best.matched.length) { finalBuf = ''; cur.tent = new Set(); renderText(); return; }
+  if (best.near && noiseCut && !voiceWasNear() && !best.matched.length) { finalBuf = ''; showIgnored(alts[0] || ''); cur.tent = new Set(); renderText(); return; }
   if (best.near && cursorIdx() === best.near.i) {
     finalBuf = ''; markNear(best.near);
     if (best.matched.length) sndOk();
@@ -1145,7 +1255,11 @@ function handleFinal(alts, conf, prior = '') {
   if (nowIdx < 0) { finalBuf = ''; cur.tent = new Set(); renderText(); flushPops(); return pageComplete(); }
   const want = cur.tokens[nowIdx].n;
   if (rem && want.startsWith(rem)) finalBuf = rem;                 // half a word so far, wait for the rest
-  else if (rem.length >= 3 && !/^(อืม|อือ|เอ่อ|เออ|อ่า|อา|เอ)+$/.test(rem)) { finalBuf = ''; markWrong(nowIdx); }
+  else if (rem.length >= 3 && !/^(อืม|อือ|เอ่อ|เออ|อ่า|อา|เอ)+$/.test(rem)) {
+    finalBuf = '';
+    if (noiseCut && (!voiceWasNear() || unrelated(rem, nowIdx))) showIgnored(rem);   // background talk: not counted
+    else markWrong(nowIdx);
+  }
   else finalBuf = '';
   if (best.matched.length) { sndOk(); if (cur.helpIdx >= 0 && /^ok/.test(cur.status[cur.helpIdx])) closeHelp(); }
   cur.tent = new Set(); renderText(); flushPops();
@@ -1858,6 +1972,7 @@ $('#pickIn').onchange = e => { const f = [...e.target.files]; e.target.value = '
   const rt = $('#voiceRate'), txt = () => $('#rateTxt').textContent = (voicePref.rate || 1) < 0.95 ? 'ช้า' : (voicePref.rate || 1) > 1.05 ? 'เร็ว' : 'ปกติ';
   rt.value = voicePref.rate || 1; txt(); pickVoice();
   const save = () => lsSet('tsb-voice', voicePref);
+  $('#noiseCut').checked = noiseCut; $('#noiseCut').onchange = e => { noiseCut = e.target.checked; lsSet('tsb-noisecut', noiseCut); if (!noiseCut) stopMeter(); };
   $('#strictSel').value = strictness; $('#strictSel').onchange = e => { strictness = e.target.value; lsSet('tsb-strict', strictness); };
   $('#voiceSel').onchange = e => { voicePref.name = e.target.value; save(); pickVoice(); };
   rt.oninput = () => { voicePref.rate = +rt.value; txt(); save(); };
