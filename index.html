@@ -595,9 +595,10 @@ const STRICT = {
 let strictness = lsGet('tsb-strict', 'normal');
 const SC = () => STRICT[strictness] || STRICT.normal;
 // returns {s,e} for an accepted match, {near, heard} when the child said something close but not right, or null
-function findWord(t, alts, p) {
+function findWord(t, alts, p, exactOnly) {
   const c = SC();
   for (const w of alts) { const pos = t.indexOf(w, p); if (pos >= 0 && pos - p <= c.slack) return { s: pos, e: pos + w.length }; }
+  if (exactOnly) return null;
   let nearBest = null;
   for (const w of alts) {
     const lw = loose(w);
@@ -627,7 +628,7 @@ function parseSpellMap(text) {
   return m;
 }
 /* ---- Thai phonics spelling (แจกลูกสะกดคำ): initial consonant → vowel → final → tone mark → syllable ---- */
-const INIT_OPTS = ['ห[งญนมยรลว]', 'อย', '[กขคตปผพฟบด][รลว]', '[ก-ฮ]'];
+const INIT_OPTS = ['ห[งญนมยรลว]', 'อย', '(?:[กขค][รลว]|ป[รล]|ตร|พ[รล]|[บดฟ]ร|[บฟ]ล)', '[ก-ฮ]'];
 // [template, vowel shown, vowel spoken, note]   I = initial, F = final consonant, F? = optional final
 const VTPL = [
   ['เIียะ', 'เ-ียะ', 'เอียะ'], ['เIียF?', 'เ-ีย', 'เอีย'], ['เIือะ', 'เ-ือะ', 'เอือะ'], ['เIือF?', 'เ-ือ', 'เอือ'],
@@ -639,28 +640,50 @@ const VTPL = [
   ['I็อF', '-็อ', 'เอาะ', 'เปลี่ยนรูป'], ['IอF?', '-อ', 'ออ'], ['IวF', '-ว-', 'อัว', 'ลดรูป'], ['IF', 'โ-ะ', 'โอะ', 'ลดรูป'], ['I', '-ะ', 'อะ', 'ลดรูป']
 ];
 const SYL_RX = [];
-VTPL.forEach((v, vi) => INIT_OPTS.forEach((ini, ii) => {
-  const src = v[0].replace('I', '(?<i>' + ini + ')').replace('F?', '(?<f>[ก-ฮ])?').replace('F', '(?<f>[ก-ฮ])') + '(?<k>(?:[ก-ฮ]{1,2}[ิุ]?์)?)';
-  SYL_RX.push({ re: new RegExp(src, 'y'), vd: v[1], vs: v[2], note: v[3] || '', bare: v[0] === 'I', order: vi * 10 + ii });
-}));
+// every template is tried with and without its final consonant and with/without a silent (การันต์) ending,
+// so the splitter can choose ปลา|ทอง instead of being forced into ปลาท|อง
+const KAR = [['', 0], ['(?<k>[ก-ฮ][ิุ]?์)', 1], ['(?<k>[ก-ฮ]{2}์)', 2]];
+VTPL.forEach((v, vi) => {
+  const fins = v[0].includes('F?') ? ['F', ''] : v[0].includes('F') ? ['F'] : [''];
+  fins.forEach(fo => KAR.forEach(([kre, kn]) => INIT_OPTS.forEach((ini, ii) => {
+    const tpl = v[0].replace('F?', fo);
+    const src = tpl.replace('I', '(?<i>' + ini + ')').replace('F', '(?<f>[ก-ฮ])') + kre;
+    SYL_RX.push({ re: new RegExp(src, 'y'), vd: v[1], vs: v[2], note: v[3] || '', bare: v[0] === 'I', kar: kn, order: vi * 10 + ii });
+  })));
+});
+/* split a word into syllables. Several splits are often possible (อาร|มณ์ vs อา|รมณ์),
+   so pick the most natural one: fewer syllables, and avoid hidden-vowel or vowel-less syllables when a written vowel can carry the sound. */
+function sylCost(r, m, atEnd) {
+  let c = 1;
+  if (r.bare) c += atEnd ? 3 : 1.6;                       // lone consonant read with ะ (ส in สวัสดี); very rare at the end of a word
+  else if (r.vd === 'โ-ะ' && r.note === 'ลดรูป') c += 0.6; // hidden โอะ (คน)
+  if (r.kar === 1) c += r.bare ? 1 : 0.1;                   // silent letter after a closed syllable (ยักษ์, อารมณ์)
+  if (r.kar === 2) c += 2;                                  // two silent letters (จันทร์) only when nothing else fits
+  if (m.groups.i.length > 1) c += 0.15;                     // clusters / leading ห only when needed
+  return c;
+}
 function syllabify(s) {
   const memo = new Map();
   function go(i) {
-    if (i === s.length) return [];
+    if (i === s.length) return { cost: 0, list: [] };
     if (memo.has(i)) return memo.get(i);
-    const cands = [];
-    for (const r of SYL_RX) { r.re.lastIndex = i; const m = r.re.exec(s); if (m && m[0].length) cands.push({ len: m[0].length, m, r }); }
-    cands.sort((a, b) => b.len - a.len || a.r.order - b.r.order);
-    for (const c of cands) {
-      const rest = go(i + c.len);
-      if (rest) { const g = c.m.groups; const res = [{ start: i, end: i + c.len, init: g.i, fin: g.f || '', kar: g.k || '', bare: c.r.bare, vd: c.r.vd, vs: c.r.vs, note: c.r.note }, ...rest]; memo.set(i, res); return res; }
+    let best = null;
+    for (const r of SYL_RX) {
+      r.re.lastIndex = i; const m = r.re.exec(s);
+      if (!m || !m[0].length) continue;
+      const rest = go(i + m[0].length); if (!rest) continue;
+      const cost = sylCost(r, m, i + m[0].length === s.length) + rest.cost;
+      if (!best || cost < best.cost - 1e-9 || (Math.abs(cost - best.cost) < 1e-9 && m[0].length > best.len)) {
+        const g = m.groups;
+        best = { cost, len: m[0].length, list: [{ start: i, end: i + m[0].length, init: g.i, fin: g.f || '', kar: g.k || '', bare: r.bare, vd: r.vd, vs: r.vs, note: r.note }, ...rest.list] };
+      }
     }
-    memo.set(i, null); return null;
+    memo.set(i, best); return best;
   }
-  return go(0);
+  const r = go(0); return r ? r.list : null;
 }
 const vowelShape = vd => vd === '-ว-' ? 'อัว' : vd.replace('-', 'อ');
-function thaiSpell(word) {
+function thaiSpellCore(word) {
   const w = String(word).replace(/[\/ๆ\s]/g, '');
   if (!/^[ก-๎]+$/.test(w)) return null;
   let t = ''; const map = [], tones = [];
@@ -669,12 +692,19 @@ function thaiSpell(word) {
   const parts = [];
   // spoken names follow the textbook: ก = กอ, ศ ษ ส = สอ, ฐ = ถอ, ณ = นอ …
   const consSay = c => c.length === 1 ? (CONS[c] ? CONS[c][1] : c + 'อ') : c === 'อย' ? 'ยอ' : c + 'อ';
+  // อักษรนำ: after a lone high/mid consonant (ขะ, สะ, ตะ …) a single low sonorant is read as if led by ห: ขนม = ขะ-หนม, ตลาด = ตะ-หลาด
+  const LEADERS = 'ขฃฉฐถผฝศษสหกจดตฎฏบปอ', SONOR = 'งญณนมยรลวฬ';
+  syl.forEach((s, si) => {
+    const prev = syl[si - 1];
+    s.lead = !!(prev && prev.bare && LEADERS.includes(prev.init) && s.init.length === 1 && SONOR.includes(s.init));
+  });
   syl.forEach((s, si) => {
     const tone = tones.find(x => x.at - 1 >= s.start && x.at - 1 < s.end);
     const orig = w.slice(map[s.start], s.end < t.length ? map[s.end] : w.length);
     const base = t.slice(s.start, s.end - s.kar.length);           // sound before the tone mark, without the silent letter
-    const sylSay = s.bare ? s.init + 'ะ' : orig;                     // a lone consonant syllable is read with ะ (ส in สวัสดี = สะ)
-    const baseSay = s.bare ? s.init + 'ะ' : base;
+    const spoken = s.kar ? orig.slice(0, orig.length - s.kar.length) : orig;   // silent letter not spoken (รมณ์ → รม)
+    const sylSay = s.bare ? s.init + 'ะ' : s.lead ? 'ห' + spoken : spoken;   // lone consonant = ะ (สะ), อักษรนำ = ห (หนม)
+    const baseSay = s.bare ? s.init + 'ะ' : s.lead ? 'ห' + base : base;
     const lead = s.init.length > 1 ? (s.init[0] === 'ห' ? ' (ห นำ)' : s.init === 'อย' ? ' (อ นำ)' : ' (ควบกล้ำ)') : '';
     parts.push({ show: s.init, say: consSay(s.init), label: 'พยัญชนะต้น' + lead, kind: 'c', sy: si });
     parts.push({ show: vowelShape(s.vd), say: s.vs, label: 'สระ' + s.vs + (s.note ? ' ' + s.note : ''), kind: 'v', sy: si });
@@ -684,12 +714,49 @@ function thaiSpell(word) {
       parts.push({ show: 'อ' + tone.ch, say: TONE[tone.ch], label: TONE[tone.ch], kind: 't', sy: si });
     }
     if (s.kar) parts.push({ show: s.kar, say: 'การันต์', label: 'ตัวการันต์ ไม่ออกเสียง', kind: 'k', sy: si });
-    parts.push({ show: orig, say: sylSay, label: syl.length > 1 ? 'พยางค์ที่ ' + (si + 1) : 'อ่านว่า', kind: syl.length > 1 ? 's' : 'whole', sy: si });
+    const showSyl = s.bare ? s.init + 'ะ' : s.lead ? 'ห' + orig : orig;
+    parts.push({ show: showSyl, say: sylSay, label: (syl.length > 1 ? 'พยางค์ที่ ' + (si + 1) : 'อ่านว่า') + (s.lead ? ' (อักษรนำ)' : ''), kind: syl.length > 1 ? 's' : 'whole', sy: si });
   });
   if (syl.length > 1) parts.push({ show: w, say: w, label: 'อ่านว่า', kind: 'whole', sy: -1 });
   return parts;
 }
 
+/* words that are not read the way they are written: spell them by how they are said, syllable by syllable */
+const IRREGULAR = {
+  'แมลง': 'มะ-แลง', 'อร่อย': 'อะ-หร่อย', 'ผลไม้': 'ผน-ละ-ไม้', 'สามารถ': 'สา-มาด', 'จักรยาน': 'จัก-กระ-ยาน', 'จระเข้': 'จอ-ระ-เข้',
+  'จริง': 'จิง', 'สร้าง': 'ส้าง', 'เศร้า': 'เส้า', 'ศรี': 'สี', 'ทราย': 'ซาย', 'ทราบ': 'ซาบ', 'ทรง': 'ซง', 'ทรัพย์': 'ซับ', 'อินทรี': 'อิน-ซี',
+  'ธรรมชาติ': 'ทำ-มะ-ชาด', 'ชาติ': 'ชาด', 'ญาติ': 'ยาด', 'เหตุ': 'เหด', 'ธาตุ': 'ทาด', 'ภูมิ': 'พูม', 'ภูมิใจ': 'พูม-ใจ', 'มนุษย์': 'มะ-นุด',
+  'กรรไกร': 'กัน-ไกร', 'บรรทัด': 'บัน-ทัด', 'ธรรม': 'ทำ', 'กรรม': 'กำ', 'ประโยชน์': 'ประ-โหยด', 'ปรากฏ': 'ปรา-กด', 'โทรศัพท์': 'โท-ระ-สับ',
+  'วิทยาศาสตร์': 'วิด-ทะ-ยา-สาด', 'คณิตศาสตร์': 'คะ-นิด-ตะ-สาด', 'ประวัติศาสตร์': 'ประ-หวัด-ติ-สาด', 'ศาสตร์': 'สาด', 'สามี': 'สา-มี',
+  'สุนัข': 'สุ-นัก', 'พยาบาล': 'พะ-ยา-บาน', 'สมุด': 'สะ-หมุด', 'ขนุน': 'ขะ-หนุน', 'ตลาด': 'ตะ-หลาด', 'สนุก': 'สะ-หนุก',
+  'พระ': 'พระ', 'บริษัท': 'บอ-ริ-สัด', 'อนุบาล': 'อะ-นุ-บาน', 'อาหาร': 'อา-หาน', 'กรุงเทพ': 'กรุง-เทพ', 'ปริศนา': 'ปริด-สะ-หนา'
+};
+function thaiSpell(word) {
+  const raw = String(word).replace(/[\/\s]/g, '');
+  const rep = /ๆ$/.test(raw);
+  const w = raw.replace(/ๆ/g, '');
+  let parts;
+  const pron = IRREGULAR[w];
+  if (pron && pron !== w) {
+    const sy = pron.split('-');
+    parts = [];
+    sy.forEach((p, si) => {
+      const sub = thaiSpellCore(p); if (!sub) return;
+      sub.forEach(x => { if (x.kind === 'whole' || x.kind === 's') { x.kind = 's'; x.label = 'พยางค์ที่ ' + (si + 1); } x.sy = si; });
+      // inner multi-syllable whole chip from the core is not needed
+      parts.push(...sub.filter((x, k) => !(x.sy === si && x.label === 'อ่านว่า')));
+    });
+    parts.push({ show: w, say: w, label: 'อ่านว่า ' + pron, kind: 'whole', sy: -1 });
+  } else {
+    parts = thaiSpellCore(w);
+  }
+  if (!parts) return null;
+  if (rep) {
+    parts.push({ show: 'ๆ', say: 'ไม้ยมก', label: 'ไม้ยมก อ่านซ้ำ', kind: 't', sy: -1 });
+    parts.push({ show: raw, say: w + ' ' + w, label: 'อ่านว่า ' + w + ' ' + w, kind: 'whole', sy: -1 });
+  }
+  return parts;
+}
 function spellParts(word, map) {
   const key = norm(word);
   if (map && map[key]) {
@@ -850,7 +917,7 @@ let rec = null, listening = false, recPaused = false, finalBuf = '';
 function startRec() {
   if (!SR) return;
   try { if (rec) { rec.onend = null; rec.abort(); } } catch (e) {}
-  rec = new SR();
+  rec = new SR(); committed = {};
   rec.lang = 'th-TH'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 4;
   rec.onresult = onResult;
   rec.onerror = e => {
@@ -884,12 +951,34 @@ function updateMicUI() {
 }
 function showNotice(msg) { const n = $('#srNotice'); n.textContent = msg; n.hidden = false; }
 
+/* React while the child is still speaking: as soon as the live (interim) transcript contains the next word exactly,
+   score it, instead of waiting for the recogniser to finish the sentence. What was scored early is remembered per
+   result so the final transcript does not score it twice. */
+let committed = {};
+function quickCommit(r, text) {
+  if (!cur.book || cur.talking || strictness === 'strict') return;
+  const start = cursorIdx(); if (start < 0) return;
+  const prior = committed[r] || '', t = norm(text);
+  if (!t.startsWith(prior)) return;                  // recogniser changed its mind; wait for the final result
+  const m = matchFrom(start, t.slice(prior.length), true);
+  if (!m.matched.length) return;
+  committed[r] = prior + t.slice(prior.length).slice(0, m.consumed);
+  finalBuf = '';
+  m.matched.forEach(markOk);
+  sndOk();
+  if (cur.helpIdx >= 0 && /^ok/.test(cur.status[cur.helpIdx])) closeHelp();
+  cur.tent = new Set(); renderText(); flushPops();
+  if (cursorIdx() < 0) pageComplete();
+}
 function onResult(e) {
   let interim = '', lastFinal = '';
   for (let r = e.resultIndex; r < e.results.length; r++) {
     const res = e.results[r];
-    if (res.isFinal) { const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript); lastFinal = alts[0]; handleFinal(alts, res[0].confidence); }
-    else interim += res[0].transcript;
+    if (res.isFinal) {
+      const prior = committed[r] || ''; delete committed[r];
+      const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript);
+      lastFinal = alts[0]; handleFinal(alts, res[0].confidence, prior);
+    } else { interim += res[0].transcript; quickCommit(r, res[0].transcript); }
   }
   const shown = (interim || lastFinal).trim();
   if (shown) $('#rHeard').textContent = 'ได้ยินว่า: ' + shown;
@@ -901,21 +990,26 @@ const cur = { book: null, p: 0, tokens: [], status: [], tent: new Set(), helped:
 
 function cursorIdx() { for (let i = 0; i < cur.tokens.length; i++) if (cur.tokens[i].readable && !/^ok/.test(cur.status[i])) return i; return -1; }
 
-function matchFrom(start, text) {
+function matchFrom(start, text, exactOnly) {
   const t = norm(text); let p = 0, i = start; const matched = []; let near = null;
   while (i < cur.tokens.length) {
     const tk = cur.tokens[i];
     if (!tk.readable || /^ok/.test(cur.status[i])) { i++; continue; }
-    const f = findWord(t, tk.alts, p); if (!f) break;
+    const f = findWord(t, tk.alts, p, exactOnly); if (!f) break;
     if (f.near) { near = { i, heard: f.heard, tone: f.tone, e: f.e }; break; }
     matched.push(i); p = f.e; i++;
   }
   return { matched, consumed: p, t, near };
 }
 
-function handleFinal(alts, conf) {
+function handleFinal(alts, conf, prior = '') {
   const start = cursorIdx(); if (start < 0) return;
   const c = SC();
+  let revised = false;
+  if (prior) {
+    // drop the words already scored from the live transcript
+    alts = alts.map(a => { const n = norm(a); if (n.startsWith(prior)) return n.slice(prior.length); revised = true; const k = n.indexOf(prior); return k >= 0 ? n.slice(k + prior.length) : n; });
+  }
   let best = null;
   for (const a of alts.slice(0, c.alts)) { const m = matchFrom(start, finalBuf + a); if (!best || m.matched.length > best.matched.length) best = m; }
   // strict mode: an unsure recogniser result does not count as a clean read of a single word
@@ -923,6 +1017,7 @@ function handleFinal(alts, conf) {
     best = { matched: [], consumed: 0, t: best.t, near: { i: best.matched[0], heard: alts[0].trim(), tone: false, unsure: true } };
   }
   best.matched.forEach(markOk);
+  if (revised && !best.matched.length) { finalBuf = ''; cur.tent = new Set(); renderText(); return; }
   if (best.near && cursorIdx() === best.near.i) {
     finalBuf = ''; markNear(best.near);
     if (best.matched.length) sndOk();
