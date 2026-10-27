@@ -216,7 +216,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .ed-head{display:grid;gap:10px;grid-template-columns:1fr;margin-bottom:18px}
 label.f{display:grid;gap:6px;font-weight:600;font-size:14px}
 label.f small{font-weight:400;color:var(--ink-faint)}
-input[type=text],textarea{font:inherit;color:var(--ink);background:#fff;border:1px solid rgba(19,35,58,.14);border-radius:14px;padding:11px 14px;width:100%;transition:border-color .15s,box-shadow .15s}
+input[type=text],select,textarea{font:inherit;color:var(--ink);background:#fff;border:1px solid rgba(19,35,58,.14);border-radius:14px;padding:11px 14px;width:100%;transition:border-color .15s,box-shadow .15s}
 input[type=text]:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 4px rgba(15,155,142,.15)}
 #edTitle{font-size:20px;font-weight:700}
 textarea{font-family:var(--f-read);font-size:19px;line-height:1.7;resize:vertical}
@@ -317,6 +317,12 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
 .crop-stage img{display:block;max-width:100%;max-height:58vh;width:auto;pointer-events:none}
 .crop-rect{position:absolute;border:3px solid var(--teal);background:rgba(24,195,165,.14);box-shadow:0 0 0 9999px rgba(19,35,58,.45);border-radius:6px;pointer-events:none}
 
+.chip.k{border-top:3px solid #9aa6b5;background:#f4f6f9;opacity:.85}
+.spark{position:fixed;z-index:46;pointer-events:none;transform:translate(-50%,-50%);font-weight:700;text-shadow:0 0 8px currentColor;animation:spark .9s cubic-bezier(.15,.7,.3,1) forwards}
+@keyframes spark{0%{opacity:0;transform:translate(-50%,-50%) scale(.3)}15%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(1.1) rotate(160deg)}}
+.w.magic{animation:magicglow .8s ease-out}
+@keyframes magicglow{0%{box-shadow:0 0 0 0 rgba(255,176,32,.0)}30%{box-shadow:0 0 0 6px rgba(255,176,32,.35),0 0 24px 6px rgba(24,195,165,.45);transform:scale(1.08)}100%{box-shadow:0 0 0 0 rgba(255,176,32,0);transform:none}}
+
 /* confetti */
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:3px;animation:fall 1.8s ease-in forwards}
@@ -362,6 +368,14 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
           <label class="opt" for="engGem"><input type="radio" name="eng" id="engGem" value="gemini"><span>ใช้ Gemini อ่าน (แม่นกว่ามาก)<small>ต้องมี API key จาก Google AI Studio ฟรีสำหรับปริมาณการใช้ในห้องเรียน key เก็บไว้ในเครื่องนี้เท่านั้น</small></span></label>
           <label class="f" for="gemKey">Gemini API key<input type="text" id="gemKey" autocomplete="off" spellcheck="false" placeholder="AIza..."></label>
           <label class="f" for="gemModel">ชื่อโมเดล <small>เปลี่ยนได้ถ้า Google ออกรุ่นใหม่</small><input type="text" id="gemModel" spellcheck="false"></label>
+        </div>
+      </details>
+      <details class="settings">
+        <summary>เสียงพี่ฮูก</summary>
+        <div class="set-grid">
+          <label class="f" for="voiceSel">เสียงอ่านภาษาไทย <small>เสียงที่ชัดที่สุดอยู่บนสุด บน Microsoft Edge จะมีเสียง Premwadee / Niwat ที่ชัดมาก</small><select id="voiceSel"></select></label>
+          <label class="f" for="voiceRate">ความเร็วในการพูด <small id="rateTxt"></small><input type="range" id="voiceRate" min="0.6" max="1.3" step="0.05"></label>
+          <div class="prow"><button class="btn" id="voiceTest">ลองฟัง: สะกดคำว่า "ข้าว"</button></div>
         </div>
       </details>
     </div>
@@ -611,7 +625,7 @@ const VTPL = [
 const SYL_RX = [];
 VTPL.forEach((v, vi) => INIT_OPTS.forEach((ini, ii) => {
   const src = v[0].replace('I', '(?<i>' + ini + ')').replace('F?', '(?<f>[ก-ฮ])?').replace('F', '(?<f>[ก-ฮ])') + '(?<k>(?:[ก-ฮ]{1,2}[ิุ]?์)?)';
-  SYL_RX.push({ re: new RegExp(src, 'y'), vd: v[1], vs: v[2], note: v[3] || '', order: vi * 10 + ii });
+  SYL_RX.push({ re: new RegExp(src, 'y'), vd: v[1], vs: v[2], note: v[3] || '', bare: v[0] === 'I', order: vi * 10 + ii });
 }));
 function syllabify(s) {
   const memo = new Map();
@@ -623,7 +637,7 @@ function syllabify(s) {
     cands.sort((a, b) => b.len - a.len || a.r.order - b.r.order);
     for (const c of cands) {
       const rest = go(i + c.len);
-      if (rest) { const g = c.m.groups; const res = [{ start: i, end: i + c.len, init: g.i, fin: g.f || '', vd: c.r.vd, vs: c.r.vs, note: c.r.note }, ...rest]; memo.set(i, res); return res; }
+      if (rest) { const g = c.m.groups; const res = [{ start: i, end: i + c.len, init: g.i, fin: g.f || '', kar: g.k || '', bare: c.r.bare, vd: c.r.vd, vs: c.r.vs, note: c.r.note }, ...rest]; memo.set(i, res); return res; }
     }
     memo.set(i, null); return null;
   }
@@ -636,18 +650,24 @@ function thaiSpell(word) {
   for (let idx = 0; idx < w.length; idx++) { const ch = w[idx]; if ('่้๊๋'.includes(ch)) tones.push({ at: t.length, ch }); else { map.push(idx); t += ch; } }
   const syl = syllabify(t); if (!syl || !syl.length) return null;
   const parts = [];
+  // spoken names follow the textbook: ก = กอ, ศ ษ ส = สอ, ฐ = ถอ, ณ = นอ …
+  const consSay = c => c.length === 1 ? (CONS[c] ? CONS[c][1] : c + 'อ') : c === 'อย' ? 'ยอ' : c + 'อ';
   syl.forEach((s, si) => {
     const tone = tones.find(x => x.at - 1 >= s.start && x.at - 1 < s.end);
     const orig = w.slice(map[s.start], s.end < t.length ? map[s.end] : w.length);
-    const base = t.slice(s.start, s.end);
-    parts.push({ show: s.init, say: s.init === 'อย' ? 'ยอ' : s.init + 'อ', label: 'พยัญชนะต้น', kind: 'c', sy: si });
+    const base = t.slice(s.start, s.end - s.kar.length);           // sound before the tone mark, without the silent letter
+    const sylSay = s.bare ? s.init + 'ะ' : orig;                     // a lone consonant syllable is read with ะ (ส in สวัสดี = สะ)
+    const baseSay = s.bare ? s.init + 'ะ' : base;
+    const lead = s.init.length > 1 ? (s.init[0] === 'ห' ? ' (ห นำ)' : s.init === 'อย' ? ' (อ นำ)' : ' (ควบกล้ำ)') : '';
+    parts.push({ show: s.init, say: consSay(s.init), label: 'พยัญชนะต้น' + lead, kind: 'c', sy: si });
     parts.push({ show: s.vd, say: s.vs, label: 'สระ' + s.vs + (s.note ? ' ' + s.note : ''), kind: 'v', sy: si });
-    if (s.fin) parts.push({ show: s.fin, say: s.fin + 'อ', label: 'ตัวสะกด', kind: 'f', sy: si });
+    if (s.fin) parts.push({ show: s.fin, say: consSay(s.fin), label: 'ตัวสะกด', kind: 'f', sy: si });
     if (tone) {
-      parts.push({ show: base, say: base, label: 'อ่านก่อนใส่วรรณยุกต์', kind: 'b', sy: si });
+      parts.push({ show: base, say: baseSay, label: 'อ่านก่อนใส่วรรณยุกต์', kind: 'b', sy: si });
       parts.push({ show: '◌' + tone.ch, say: TONE[tone.ch], label: TONE[tone.ch], kind: 't', sy: si });
     }
-    parts.push({ show: orig, say: orig, label: syl.length > 1 ? 'พยางค์ที่ ' + (si + 1) : 'อ่านว่า', kind: syl.length > 1 ? 's' : 'whole', sy: si });
+    if (s.kar) parts.push({ show: s.kar, say: 'การันต์', label: 'ตัวการันต์ ไม่ออกเสียง', kind: 'k', sy: si });
+    parts.push({ show: orig, say: sylSay, label: syl.length > 1 ? 'พยางค์ที่ ' + (si + 1) : 'อ่านว่า', kind: syl.length > 1 ? 's' : 'whole', sy: si });
   });
   if (syl.length > 1) parts.push({ show: w, say: w, label: 'อ่านว่า', kind: 'whole', sy: -1 });
   return parts;
@@ -687,8 +707,67 @@ function beep(notes) {
     notes.forEach(([f, d, type]) => { const o = actx.createOscillator(), g = actx.createGain(); o.type = type || 'sine'; o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.18, t + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d + .05); t += d * .8; });
   } catch (e) {}
 }
-const sndOk = () => beep([[880, .12]]);
-const sndPage = () => beep([[523, .15], [659, .15], [784, .15], [1047, .35]]);
+/* magic-spell effect: a rising whoosh, a sparkling chime run and twinkles, all synthesized */
+let noiseBuf = null;
+function magicSound(big) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const t0 = actx.currentTime + 0.01, dur = big ? 1.6 : 0.8;
+    const out = actx.createGain(); out.gain.value = big ? 0.55 : 0.42; out.connect(actx.destination);
+    // shimmering echo
+    const dl = actx.createDelay(1); dl.delayTime.value = 0.11;
+    const fb = actx.createGain(); fb.gain.value = 0.38;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6500;
+    dl.connect(lp); lp.connect(fb); fb.connect(dl); dl.connect(out);
+    const bus = actx.createGain(); bus.connect(out); bus.connect(dl);
+    // whoosh: noise swept upward through a band-pass
+    if (!noiseBuf) { noiseBuf = actx.createBuffer(1, actx.sampleRate * 2, actx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+    const nz = actx.createBufferSource(); nz.buffer = noiseBuf;
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
+    bp.frequency.setValueAtTime(350, t0); bp.frequency.exponentialRampToValueAtTime(big ? 7000 : 5200, t0 + dur * 0.55);
+    const ng = actx.createGain(); ng.gain.setValueAtTime(0.0001, t0); ng.gain.exponentialRampToValueAtTime(big ? 0.5 : 0.32, t0 + dur * 0.3); ng.gain.exponentialRampToValueAtTime(0.0001, t0 + dur * 0.7);
+    nz.connect(bp); bp.connect(ng); ng.connect(bus); nz.start(t0); nz.stop(t0 + dur);
+    // chime run on a bright pentatonic scale
+    const run = big ? [523, 659, 784, 988, 1175, 1319, 1568, 1976, 2349] : [784, 988, 1319, 1568, 2093];
+    const step = big ? 0.075 : 0.055;
+    run.forEach((f, i) => {
+      const t = t0 + 0.06 + i * step;
+      [[f, 'sine', 0.22], [f * 2, 'triangle', 0.06]].forEach(([fr, type, g]) => {
+        const o = actx.createOscillator(), e = actx.createGain();
+        o.type = type; o.frequency.setValueAtTime(fr, t);
+        e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(g, t + 0.008); e.gain.exponentialRampToValueAtTime(0.0001, t + (big ? 0.9 : 0.55));
+        o.connect(e); e.connect(bus); o.start(t); o.stop(t + 1);
+      });
+    });
+    // final sparkle chord for a finished page
+    if (big) [1047, 1319, 1568, 2093].forEach(f => { const t = t0 + 0.06 + run.length * step; const o = actx.createOscillator(), e = actx.createGain(); o.type = 'sine'; o.frequency.value = f; e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(0.12, t + 0.02); e.gain.exponentialRampToValueAtTime(0.0001, t + 1.4); o.connect(e); e.connect(bus); o.start(t); o.stop(t + 1.5); });
+    // twinkles
+    const n = big ? 16 : 8;
+    for (let i = 0; i < n; i++) {
+      const t = t0 + 0.15 + Math.random() * dur * 0.75, f = 2600 + Math.random() * 3600;
+      const o = actx.createOscillator(), e = actx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 1.25, t + 0.08);
+      e.gain.setValueAtTime(0.0001, t); e.gain.exponentialRampToValueAtTime(0.07, t + 0.004); e.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+      o.connect(e); e.connect(bus); o.start(t); o.stop(t + 0.15);
+    }
+  } catch (e) {}
+}
+const sndOk = () => magicSound(false);
+const sndPage = () => magicSound(true);
+function sparkle(el) {
+  if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  const glyphs = ['✦', '✧', '★', '✨', '·'], cols = ['#ffb020', '#18c3a5', '#8b6cf0', '#ff7ab6', '#3b7cf6'];
+  for (let k = 0; k < 14; k++) {
+    const d = document.createElement('span'); d.className = 'spark'; d.textContent = glyphs[k % glyphs.length];
+    const a = (Math.PI * 2 * k) / 14 + Math.random() * 0.4, dist = 34 + Math.random() * 46;
+    d.style.left = cx + 'px'; d.style.top = cy + 'px'; d.style.color = cols[k % cols.length];
+    d.style.setProperty('--dx', Math.cos(a) * dist + 'px'); d.style.setProperty('--dy', Math.sin(a) * dist + 'px');
+    d.style.fontSize = (12 + Math.random() * 14) + 'px'; d.style.animationDelay = (Math.random() * 0.08) + 's';
+    document.body.appendChild(d); setTimeout(() => d.remove(), 1000);
+  }
+  el.classList.remove('magic'); void el.offsetWidth; el.classList.add('magic');
+}
 const sndOops = () => beep([[260, .18, 'triangle'], [220, .22, 'triangle']]);
 function confetti() {
   const box = document.createElement('div'); box.className = 'confetti';
@@ -699,17 +778,36 @@ function confetti() {
 
 /* ================= text-to-speech ================= */
 const tts = window.speechSynthesis || null;
-let thVoice = null;
-function pickVoice() { if (!tts) return; const vs = tts.getVoices(); thVoice = vs.find(v => /^th/i.test(v.lang) && /google/i.test(v.name)) || vs.find(v => /^th/i.test(v.lang)) || null; }
+let thVoice = null, thVoices = [];
+let voicePref = lsGet('tsb-voice', { name: '', rate: 1 });
+// clearest Thai voices first: Microsoft natural voices (Edge), then Google, then anything Thai
+function voiceScore(v) {
+  const n = v.name;
+  if (/Premwadee|Niwat|Achara/i.test(n) && /natural|online/i.test(n)) return 0;
+  if (/natural|online/i.test(n)) return 1;
+  if (/google/i.test(n)) return 2;
+  if (/Kanya|Narisa/i.test(n)) return 3;
+  return 4;
+}
+function pickVoice() {
+  if (!tts) return;
+  thVoices = tts.getVoices().filter(v => /^th/i.test(v.lang)).sort((a, b) => voiceScore(a) - voiceScore(b));
+  thVoice = thVoices.find(v => v.name === voicePref.name) || thVoices[0] || null;
+  const sel = document.getElementById('voiceSel');
+  if (sel) {
+    sel.innerHTML = thVoices.length ? thVoices.map(v => `<option value="${esc(v.name)}"${thVoice && v.name === thVoice.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('') : '<option value="">ไม่พบเสียงภาษาไทยในเครื่องนี้</option>';
+  }
+}
 if (tts) { pickVoice(); tts.onvoiceschanged = pickVoice; }
 
 let speakToken = 0;
+
 function speak(text, rate = 0.85) {
   return new Promise(res => {
     if (!tts) { res(); return; }
     pauseRecForSpeech();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'th-TH'; if (thVoice) u.voice = thVoice; u.rate = rate;
+    u.lang = 'th-TH'; if (thVoice) u.voice = thVoice; u.rate = Math.max(0.3, Math.min(1.6, rate * (voicePref.rate || 1))); u.pitch = 1.05; u.volume = 1;
     let done = false; const fin = () => { if (done) return; done = true; res(); };
     u.onend = fin; u.onerror = fin;
     setTimeout(fin, 1200 + text.length * 400);
@@ -975,11 +1073,11 @@ async function spellSeq() {
     for (let k = 0; k < parts.length; k++) {
       if (my !== speakToken) return false;
       chips.forEach(c => c.classList.remove('on')); chips[k].classList.add('on');
-      await speak(parts[k].say, parts[k].kind === 'whole' ? 0.65 : 0.8);
-      await sleep(180);
+      await speak(parts[k].say, parts[k].kind === 'whole' || parts[k].kind === 's' ? 0.7 : 0.75);
+      await sleep(parts[k].kind === 'b' || parts[k].kind === 't' ? 260 : 340);
     }
     chips.forEach(c => c.classList.remove('on'));
-    if (r === 1) await sleep(700);
+    if (r === 1) await sleep(900);
   }
   return my === speakToken;
 }
@@ -1340,6 +1438,7 @@ function addScore(i, pts) {
 function flushPops() {
   cur.pops.splice(0).forEach(([i, pts]) => {
     const w = $(`#rText [data-i="${i}"]`); if (!w) return;
+    sparkle(w);
     const r = w.getBoundingClientRect(); const d = document.createElement('div');
     d.className = 'pop' + (pts < 10 ? ' help' : ''); d.textContent = '+' + pts;
     d.style.left = (r.left + r.width / 2) + 'px'; d.style.top = (r.top - 8) + 'px';
@@ -1482,6 +1581,14 @@ $('#pickIn').onchange = e => { const f = [...e.target.files]; e.target.value = '
   $('#gemKey').value = c.key; $('#gemModel').value = c.model;
   const save = () => lsSet('tsb-ocr', { engine: $('#engGem').checked ? 'gemini' : 'tess', key: $('#gemKey').value.trim(), model: $('#gemModel').value.trim() || 'gemini-2.5-flash' });
   ['engTess', 'engGem', 'gemKey', 'gemModel'].forEach(id => $('#' + id).addEventListener('change', save));
+})();
+(function initVoiceSettings() {
+  const rt = $('#voiceRate'), txt = () => $('#rateTxt').textContent = (voicePref.rate || 1) < 0.95 ? 'ช้า' : (voicePref.rate || 1) > 1.05 ? 'เร็ว' : 'ปกติ';
+  rt.value = voicePref.rate || 1; txt(); pickVoice();
+  const save = () => lsSet('tsb-voice', voicePref);
+  $('#voiceSel').onchange = e => { voicePref.name = e.target.value; save(); pickVoice(); };
+  rt.oninput = () => { voicePref.rate = +rt.value; txt(); save(); };
+  $('#voiceTest').onclick = async () => { stopSpeech(); for (const p of thaiSpell('ข้าว')) { await speak(p.say, 0.75); await sleep(300); } };
 })();
 $('#autoHelp').onchange = e => { autoHelp = e.target.checked; lsSet('tsb-autohelp', autoHelp); };
 $('#btnBulkText').onclick = () => {
