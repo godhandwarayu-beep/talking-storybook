@@ -373,11 +373,17 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
       <details class="settings">
         <summary>เสียงพี่ฮูก</summary>
         <div class="set-grid">
-          <label class="f" for="voiceSel">เสียงอ่านภาษาไทย <small>เสียงที่ชัดที่สุดอยู่บนสุด บน Microsoft Edge จะมีเสียง Premwadee / Niwat ที่ชัดมาก</small><select id="voiceSel"></select></label>
+          <label class="f" for="engineSel">แหล่งเสียงพี่ฮูก <small>เสียงคุณภาพสูงใช้ Gemini API key เดียวกับการอ่านตัวหนังสือจากภาพ เสียงที่สร้างแล้วเก็บไว้ในเครื่อง ใช้ซ้ำได้ทันทีและใช้ได้แม้ไม่มีเน็ต</small>
+            <select id="engineSel"><option value="auto">เสียงคุณภาพสูง (Gemini) ถ้ามี API key ไม่มีก็ใช้เสียงในเครื่อง</option><option value="device">เสียงในเครื่องเท่านั้น</option></select></label>
+          <div class="ocrst" id="hqStatus"></div>
+          <label class="f" for="gemVoice">เสียงของ Gemini
+            <select id="gemVoice"><option value="Kore">Kore · ผู้หญิง ชัดเจน</option><option value="Leda">Leda · ผู้หญิง สดใส</option><option value="Aoede">Aoede · ผู้หญิง นุ่มนวล</option><option value="Puck">Puck · ผู้ชาย ร่าเริง</option><option value="Charon">Charon · ผู้ชาย สุภาพ</option></select></label>
+          <label class="f" for="ttsModel">โมเดลเสียง <small>เปลี่ยนได้ถ้า Google ออกรุ่นใหม่</small><input type="text" id="ttsModel" spellcheck="false"></label>
+          <label class="f" for="voiceSel">เสียงในเครื่อง (สำรอง) <small>บนคอมพิวเตอร์ แนะนำเปิดด้วย Microsoft Edge จะมีเสียง Premwadee / Niwat ที่ชัดกว่า Chrome มาก</small><select id="voiceSel"></select></label>
           <label class="f" for="voiceRate">ความเร็วในการพูด <small id="rateTxt"></small><input type="range" id="voiceRate" min="0.6" max="1.3" step="0.05"></label>
           <label class="f" for="strictSel">การตรวจเสียงอ่านของนักเรียน <small>ปกติ = ต้องออกเสียงและวรรณยุกต์ถูก ถ้าเพี้ยนเล็กน้อยพี่ฮูกจะบอกว่า "เกือบแล้ว" ให้อ่านใหม่</small>
             <select id="strictSel"><option value="easy">ผ่อนปรน (สำหรับเด็กที่เพิ่งเริ่ม)</option><option value="normal">ปกติ</option><option value="strict">เข้มงวด (ต้องอ่านชัดมาก)</option></select></label>
-          <div class="prow"><button class="btn" id="voiceTest">ลองฟัง: สะกดคำว่า "ข้าว"</button></div>
+          <div class="prow"><button class="btn" id="voiceTest">ลองฟัง: สะกดคำว่า "ข้าว"</button><button class="btn" id="voiceClear">ล้างเสียงที่เก็บไว้</button></div>
         </div>
       </details>
     </div>
@@ -863,7 +869,7 @@ function confetti() {
 /* ================= text-to-speech ================= */
 const tts = window.speechSynthesis || null;
 let thVoice = null, thVoices = [];
-let voicePref = lsGet('tsb-voice', { name: '', rate: 1 });
+let voicePref = Object.assign({ name: '', rate: 1, engine: 'auto', gemVoice: 'Kore', ttsModel: 'gemini-2.5-flash-preview-tts' }, lsGet('tsb-voice', {}));
 // clearest Thai voices first: Microsoft natural voices (Edge), then Google, then anything Thai
 function voiceScore(v) {
   const n = v.name;
@@ -894,7 +900,7 @@ function warmTTS() {
   try { const u = new SpeechSynthesisUtterance('อ'); u.lang = 'th-TH'; if (thVoice) u.voice = thVoice; u.volume = 0; u.rate = 2; tts.speak(u); } catch (e) {}
 }
 ['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, warmTTS, { once: true, capture: true }));
-async function speak(text, rate = 0.85) {
+async function speakDevice(text, rate = 0.85) {
   const gap = 140 - (Date.now() - lastCancel);
   if (gap > 0) await sleep(gap);
   return new Promise(res => {
@@ -908,7 +914,118 @@ async function speak(text, rate = 0.85) {
     tts.speak(u);
   });
 }
-function stopSpeech() { speakToken++; if (tts && (tts.speaking || tts.pending)) { tts.cancel(); lastCancel = Date.now(); } }
+
+/* ---------- high-quality voice: Gemini text-to-speech, cached on this device ---------- */
+const HQ_RATE = 24000;
+let hqPlaying = false, hqSrc = null, hqDown = '', hqCoolUntil = 0;
+const hqMem = new Map(), hqInflight = new Map();
+const hqDB = (() => {
+  let p = null;
+  const open = () => p || (p = new Promise(res => { try { const r = indexedDB.open('tsb-tts', 1); r.onupgradeneeded = () => r.result.createObjectStore('clips'); r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch (e) { res(null); } }));
+  const run = async (mode, fn) => { const db = await open(); if (!db) return null; return new Promise(res => { try { const t = db.transaction('clips', mode); const rq = fn(t.objectStore('clips')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => res(null); } catch (e) { res(null); } }); };
+  return { get: k => run('readonly', s => s.get(k)), put: (k, v) => run('readwrite', s => s.put(v, k)), clear: () => run('readwrite', s => s.clear()), keys: () => run('readonly', s => s.getAllKeys()) };
+})();
+const hqKey = (text, slow) => (voicePref.gemVoice || 'Kore') + '|' + (slow ? 's' : 'n') + '|' + text;
+const hqConfigured = () => voicePref.engine !== 'device' && !!ocrCfg().key.trim();
+function hqPrompt(text, slow) {
+  return (slow ? 'Say this Thai text very slowly and clearly, like a kind Thai teacher teaching a young child to read. Pronounce every sound and tone exactly. Say only the text: '
+               : 'Say this Thai text clearly and naturally, like a kind Thai teacher reading to a child. Say only the text: ') + text;
+}
+function b64ToInt16(b64) { const bin = atob(b64), n = bin.length >> 1, out = new Int16Array(n); for (let i = 0; i < n; i++) out[i] = (bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8)) << 16 >> 16; return out; }
+function int16ToB64(a) { const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+function trimPcm(pcm) {
+  const th = 600, pad = Math.round(HQ_RATE * 0.04);
+  let a = 0, b = pcm.length - 1;
+  while (a < b && Math.abs(pcm[a]) < th) a++;
+  while (b > a && Math.abs(pcm[b]) < th) b--;
+  return pcm.slice(Math.max(0, a - pad), Math.min(pcm.length, b + pad));
+}
+async function hqFetch(text, slow) {
+  const cfg = ocrCfg();
+  const model = (voicePref.ttsModel || 'gemini-2.5-flash-preview-tts').trim();
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.key.trim() },
+    body: JSON.stringify({ contents: [{ parts: [{ text: hqPrompt(text, slow) }] }],
+      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voicePref.gemVoice || 'Kore' } } } } })
+  });
+  if (!r.ok) { const e = new Error(r.status === 429 ? 'quota' : r.status === 400 || r.status === 403 ? 'key' : r.status === 404 ? 'model' : 'net'); throw e; }
+  const j = await r.json();
+  const part = (((j.candidates || [])[0] || {}).content || {}).parts || [];
+  const d = part.find(x => x.inlineData || x.inline_data);
+  if (!d) throw new Error('empty');
+  const inl = d.inlineData || d.inline_data;
+  return trimPcm(b64ToInt16(inl.data));
+}
+// cached clip (memory → this device) or, if allowed, a fresh one from Gemini
+async function hqClip(text, slow, allowFetch = true) {
+  const k = hqKey(text, slow);
+  if (hqMem.has(k)) return hqMem.get(k);
+  const stored = await hqDB.get(k);
+  if (stored) { const pcm = new Int16Array(stored); hqMem.set(k, pcm); return pcm; }
+  if (!allowFetch || !hqConfigured() || hqDown || Date.now() < hqCoolUntil || !navigator.onLine) return null;
+  if (hqInflight.has(k)) return hqInflight.get(k);
+  const job = (async () => {
+    try {
+      const pcm = await hqFetch(text, slow);
+      hqMem.set(k, pcm); hqDB.put(k, pcm.buffer.slice(0));
+      return pcm;
+    } catch (e) {
+      if (e.message === 'quota') hqCoolUntil = Date.now() + 60000;
+      else if (e.message === 'key' || e.message === 'model') { hqDown = e.message; showHqStatus(); }
+      return null;
+    } finally { hqInflight.delete(k); }
+  })();
+  hqInflight.set(k, job);
+  return job;
+}
+// everything the tutor may say for one book: each word (normal + slow) and every spelling step
+function bookPhrases(b) {
+  const map = parseSpellMap(b.spell), out = new Map();
+  b.pages.forEach(pg => tokenize(pg.text).forEach(tk => {
+    if (!tk.readable) return;
+    const w = tk.t.replace(/\//g, '');
+    out.set(hqKey(w, false), [w, false]); out.set(hqKey(w, true), [w, true]);
+    (spellParts(tk.t, map) || []).forEach(p => out.set(hqKey(p.say, true), [p.say, true]));
+  }));
+  return [...out.values()];
+}
+function playPcm(pcm) {
+  return new Promise(res => {
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const buf = actx.createBuffer(1, pcm.length, HQ_RATE), ch = buf.getChannelData(0);
+      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+      const src = actx.createBufferSource(); src.buffer = buf; src.connect(actx.destination);
+      hqSrc = src; hqPlaying = true;
+      const fin = () => { if (hqSrc === src) { hqSrc = null; hqPlaying = false; } res(); };
+      src.onended = fin; setTimeout(fin, buf.duration * 1000 + 800);
+      pauseRecForSpeech(); src.start();
+    } catch (e) { hqPlaying = false; res(); }
+  });
+}
+async function speak(text, rate = 0.85) {
+  const slow = rate <= 0.75, my = speakToken;
+  const pcm = await hqClip(text, slow, hqConfigured());
+  if (my !== speakToken) return;                   // stopped while the clip was loading
+  if (pcm) return playPcm(pcm);
+  return speakDevice(text, rate);
+}
+// warm the cache for what the tutor is about to say, one request at a time
+let prefetchQ = Promise.resolve();
+function hqPrefetch(list) {
+  if (!hqConfigured()) return;
+  list.forEach(([t, slow]) => { prefetchQ = prefetchQ.then(() => hqClip(t, slow)).catch(() => {}); });
+}
+function showHqStatus() {
+  const el = document.getElementById('hqStatus'); if (!el) return;
+  if (voicePref.engine === 'device') { el.className = 'ocrst'; el.textContent = 'ใช้เสียงในเครื่อง'; return; }
+  if (!ocrCfg().key.trim()) { el.className = 'ocrst err'; el.textContent = 'ยังไม่มี Gemini API key ใส่ได้ที่ "ตั้งค่าการอ่านตัวหนังสือจากภาพ" ตอนนี้ใช้เสียงในเครื่องแทน'; return; }
+  if (hqDown === 'key') { el.className = 'ocrst err'; el.textContent = 'Gemini ไม่รับ API key นี้ ตอนนี้ใช้เสียงในเครื่องแทน'; return; }
+  if (hqDown === 'model') { el.className = 'ocrst err'; el.textContent = 'ไม่พบโมเดลเสียงนี้ ตรวจชื่อโมเดล ตอนนี้ใช้เสียงในเครื่องแทน'; return; }
+  el.className = 'ocrst ok'; el.textContent = 'เปิดเสียงคุณภาพสูงแล้ว ครั้งแรกของแต่ละคำจะช้าเล็กน้อย';
+}
+function stopSpeech() { speakToken++; if (hqSrc) { try { hqSrc.stop(); } catch (e) {} hqSrc = null; hqPlaying = false; } if (tts && (tts.speaking || tts.pending)) { tts.cancel(); lastCancel = Date.now(); } }
 
 /* ================= speech recognition ================= */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -930,7 +1047,7 @@ function startRec() {
 function pauseRecForSpeech() {
   if (!listening || recPaused) return;
   recPaused = true; try { rec && rec.abort(); } catch (e) {}
-  const check = () => { if (cur.talking || (tts && (tts.speaking || tts.pending))) { setTimeout(check, 250); return; } recPaused = false; if (listening) startRec(); };
+  const check = () => { if (cur.talking || hqPlaying || (tts && (tts.speaking || tts.pending))) { setTimeout(check, 250); return; } recPaused = false; if (listening) startRec(); };
   setTimeout(check, 400);
 }
 function startListening() {
@@ -1154,6 +1271,7 @@ function fadeHelp(wait) {
 }
 function openHelp(i, msg) {
   cancelFade();
+  { const tw = cur.tokens[i].t.replace(/\//g, ''); hqPrefetch([[tw, true], ...spellParts(cur.tokens[i].t, cur.spellMap).map(p => [p.say, true])]); }
   cur.helpIdx = i; const tk = cur.tokens[i];
   $('#helpWord').textContent = tk.t.replace(/\//g, '');
   $('#helpMsg').textContent = msg || 'อยากให้พี่ช่วยแบบไหน';
@@ -1301,18 +1419,31 @@ const findBook = id => mergedBooks().find(b => b.id === id);
 async function reloadBooks() { books = await store.all(); renderShelf(); }
 
 /* ---- export / import ---- */
-function exportBook(b) {
-  const data = { format: 'talking-storybook', version: 1, id: b.id, title: b.title, spell: b.spell || '', pages: b.pages };
+async function exportBook(b) {
+  const data = { format: 'talking-storybook', version: 2, id: b.id, title: b.title, spell: b.spell || '', pages: b.pages };
+  // attach the high-quality voice so students' devices can play it without a key
+  const phrases = bookPhrases(b);
+  const audio = {}; let have = 0;
+  if (hqConfigured() || (await hqDB.keys() || []).length) {
+    for (let k = 0; k < phrases.length; k++) {
+      const [t, slow] = phrases[k];
+      if (hqConfigured() && k % 3 === 0) toast(`กำลังเตรียมเสียงพี่ฮูก ${k + 1}/${phrases.length}…`, 4000);
+      const pcm = await hqClip(t, slow, hqConfigured());
+      if (pcm) { audio[hqKey(t, slow)] = int16ToB64(pcm); have++; }
+    }
+  }
+  if (have) data.audio = audio;
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = (b.title || 'นิทาน').replace(/[\\/:*?"<>|]/g, '') + '.json';
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  toast('ส่งออกไฟล์นิทานแล้ว');
+  toast(have ? `ส่งออกไฟล์นิทานพร้อมเสียงคุณภาพสูง ${have}/${phrases.length} เสียง` : 'ส่งออกไฟล์นิทานแล้ว (ใช้เสียงในเครื่องของผู้เปิด)', 4000);
 }
 function validBook(d) { return d && Array.isArray(d.pages) && d.pages.length && typeof d.title === 'string'; }
 async function importJSON(d) {
   if (!validBook(d)) throw new Error('bad');
   const b = { id: d.id && !d.builtin ? d.id : uid(), title: d.title, spell: d.spell || '', pages: d.pages.map(p => ({ img: p.img || '', text: p.text || '' })), updated: Date.now() };
+  if (d.audio && typeof d.audio === 'object') { for (const [k, v] of Object.entries(d.audio)) { try { const pcm = b64ToInt16(v); hqMem.set(k, pcm); await hqDB.put(k, pcm.buffer.slice(0)); } catch (e) {} } }
   await store.put(b); await reloadBooks(); return b;
 }
 
@@ -1730,7 +1861,19 @@ $('#pickIn').onchange = e => { const f = [...e.target.files]; e.target.value = '
   $('#strictSel').value = strictness; $('#strictSel').onchange = e => { strictness = e.target.value; lsSet('tsb-strict', strictness); };
   $('#voiceSel').onchange = e => { voicePref.name = e.target.value; save(); pickVoice(); };
   rt.oninput = () => { voicePref.rate = +rt.value; txt(); save(); };
-  $('#voiceTest').onclick = async () => { stopSpeech(); for (const p of thaiSpell('ข้าว')) { await speak(p.say, 0.75); await sleep(300); } };
+  $('#engineSel').value = voicePref.engine; $('#gemVoice').value = voicePref.gemVoice; $('#ttsModel').value = voicePref.ttsModel; showHqStatus();
+  $('#engineSel').onchange = e => { voicePref.engine = e.target.value; hqDown = ''; save(); showHqStatus(); };
+  $('#gemVoice').onchange = e => { voicePref.gemVoice = e.target.value; save(); };
+  $('#ttsModel').onchange = e => { voicePref.ttsModel = e.target.value.trim() || 'gemini-2.5-flash-preview-tts'; hqDown = ''; save(); showHqStatus(); };
+  ['gemKey', 'engGem', 'engTess'].forEach(id => $('#' + id).addEventListener('change', () => { hqDown = ''; showHqStatus(); }));
+  $('#voiceTest').onclick = async () => {
+    stopSpeech(); const b = $('#voiceTest'); b.disabled = true;
+    const parts = thaiSpell('ข้าว');
+    if (hqConfigured()) { b.textContent = 'กำลังเตรียมเสียง…'; for (const p of parts) await hqClip(p.say, true); }
+    b.textContent = 'ลองฟัง: สะกดคำว่า "ข้าว"'; b.disabled = false; showHqStatus();
+    for (const p of parts) { await speak(p.say, 0.7); await sleep(300); }
+  };
+  $('#voiceClear').onclick = async () => { await hqDB.clear(); hqMem.clear(); toast('ล้างเสียงที่เก็บไว้แล้ว'); };
 })();
 $('#autoHelp').onchange = e => { autoHelp = e.target.checked; lsSet('tsb-autohelp', autoHelp); };
 $('#btnBulkText').onclick = () => {
