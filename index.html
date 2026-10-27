@@ -375,6 +375,8 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
         <div class="set-grid">
           <label class="f" for="voiceSel">เสียงอ่านภาษาไทย <small>เสียงที่ชัดที่สุดอยู่บนสุด บน Microsoft Edge จะมีเสียง Premwadee / Niwat ที่ชัดมาก</small><select id="voiceSel"></select></label>
           <label class="f" for="voiceRate">ความเร็วในการพูด <small id="rateTxt"></small><input type="range" id="voiceRate" min="0.6" max="1.3" step="0.05"></label>
+          <label class="f" for="strictSel">การตรวจเสียงอ่านของนักเรียน <small>ปกติ = ต้องออกเสียงและวรรณยุกต์ถูก ถ้าเพี้ยนเล็กน้อยพี่ฮูกจะบอกว่า "เกือบแล้ว" ให้อ่านใหม่</small>
+            <select id="strictSel"><option value="easy">ผ่อนปรน (สำหรับเด็กที่เพิ่งเริ่ม)</option><option value="normal">ปกติ</option><option value="strict">เข้มงวด (ต้องอ่านชัดมาก)</option></select></label>
           <div class="prow"><button class="btn" id="voiceTest">ลองฟัง: สะกดคำว่า "ข้าว"</button></div>
         </div>
       </details>
@@ -583,20 +585,34 @@ function levRatio(a, b) {
   return 1 - prev[n] / Math.max(m, n);
 }
 
-const SLACK = 6;
+/* how strictly a child's reading is checked (teacher setting)
+   easy: accept close sounds · normal: tones and sounds must match, close sounds get "almost" · strict: first guess only, very little slack */
+const STRICT = {
+  easy:   { slack: 6, alts: 4, accept: 'loose', near: 0 },
+  normal: { slack: 3, alts: 2, accept: 'exact', near: 0.6 },
+  strict: { slack: 1, alts: 1, accept: 'exact', near: 0.5, conf: 0.55 }
+};
+let strictness = lsGet('tsb-strict', 'normal');
+const SC = () => STRICT[strictness] || STRICT.normal;
+// returns {s,e} for an accepted match, {near, heard} when the child said something close but not right, or null
 function findWord(t, alts, p) {
-  for (const w of alts) { const pos = t.indexOf(w, p); if (pos >= 0 && pos - p <= SLACK) return { s: pos, e: pos + w.length }; }
+  const c = SC();
+  for (const w of alts) { const pos = t.indexOf(w, p); if (pos >= 0 && pos - p <= c.slack) return { s: pos, e: pos + w.length }; }
+  let nearBest = null;
   for (const w of alts) {
     const lw = loose(w);
-    for (let s = p; s <= Math.min(p + SLACK, t.length - 1); s++) {
+    for (let s = p; s <= Math.min(p + c.slack, t.length - 1); s++) {
       for (const L of [w.length, w.length + 1, w.length - 1, w.length + 2]) {
         if (L < 1 || s + L > t.length) continue;
-        const sub = loose(t.substr(s, L));
-        if (sub === lw || (lw.length >= 3 && levRatio(sub, lw) >= 0.75)) return { s, e: s + L };
+        const raw = t.substr(s, L), sub = loose(raw);
+        const sameButTone = sub === lw;                        // e.g. ส้ม said as สม
+        const ratio = levRatio(sub, lw);
+        if (c.accept === 'loose' && (sameButTone || (lw.length >= 3 && ratio >= 0.75))) return { s, e: s + L };
+        if (c.near && (sameButTone || ratio >= c.near) && (!nearBest || ratio > nearBest.r)) nearBest = { near: true, heard: raw, r: sameButTone ? 1 : ratio, tone: sameButTone, e: s + L };
       }
     }
   }
-  return null;
+  return nearBest;
 }
 
 /* ================= letters for spelling help ================= */
@@ -643,6 +659,7 @@ function syllabify(s) {
   }
   return go(0);
 }
+const vowelShape = vd => vd === '-ว-' ? 'อัว' : vd.replace('-', 'อ');
 function thaiSpell(word) {
   const w = String(word).replace(/[\/ๆ\s]/g, '');
   if (!/^[ก-๎]+$/.test(w)) return null;
@@ -660,11 +677,11 @@ function thaiSpell(word) {
     const baseSay = s.bare ? s.init + 'ะ' : base;
     const lead = s.init.length > 1 ? (s.init[0] === 'ห' ? ' (ห นำ)' : s.init === 'อย' ? ' (อ นำ)' : ' (ควบกล้ำ)') : '';
     parts.push({ show: s.init, say: consSay(s.init), label: 'พยัญชนะต้น' + lead, kind: 'c', sy: si });
-    parts.push({ show: s.vd, say: s.vs, label: 'สระ' + s.vs + (s.note ? ' ' + s.note : ''), kind: 'v', sy: si });
+    parts.push({ show: vowelShape(s.vd), say: s.vs, label: 'สระ' + s.vs + (s.note ? ' ' + s.note : ''), kind: 'v', sy: si });
     if (s.fin) parts.push({ show: s.fin, say: consSay(s.fin), label: 'ตัวสะกด', kind: 'f', sy: si });
     if (tone) {
       parts.push({ show: base, say: baseSay, label: 'อ่านก่อนใส่วรรณยุกต์', kind: 'b', sy: si });
-      parts.push({ show: '◌' + tone.ch, say: TONE[tone.ch], label: TONE[tone.ch], kind: 't', sy: si });
+      parts.push({ show: 'อ' + tone.ch, say: TONE[tone.ch], label: TONE[tone.ch], kind: 't', sy: si });
     }
     if (s.kar) parts.push({ show: s.kar, say: 'การันต์', label: 'ตัวการันต์ ไม่ออกเสียง', kind: 'k', sy: si });
     parts.push({ show: orig, say: sylSay, label: syl.length > 1 ? 'พยางค์ที่ ' + (si + 1) : 'อ่านว่า', kind: syl.length > 1 ? 's' : 'whole', sy: si });
@@ -690,8 +707,8 @@ function spellParts(word, map) {
   }
   const parts = ordered.map(ch => {
     if (CONS[ch]) return { show: ch, say: CONS[ch][1], label: ch + ' ' + CONS[ch][0], kind: 'c' };
-    if (VOW[ch]) return { show: ch === 'ั' || ch === 'ิ' || ch === 'ี' || ch === 'ึ' || ch === 'ื' || ch === 'ุ' || ch === 'ู' || ch === '็' || ch === 'ำ' ? '◌' + ch : ch, say: VOW[ch], label: VOW[ch], kind: 'v' };
-    if (TONE[ch]) return { show: '◌' + ch, say: TONE[ch], label: TONE[ch], kind: 't' };
+    if (VOW[ch]) return { show: 'เแโใไ'.includes(ch) ? ch + 'อ' : /[ะาๅฤฦ]/.test(ch) ? (/[ฤฦ]/.test(ch) ? ch : 'อ' + ch) : 'อ' + ch, say: VOW[ch], label: VOW[ch], kind: 'v' };
+    if (TONE[ch]) return { show: 'อ' + ch, say: TONE[ch], label: TONE[ch], kind: 't' };
     return { show: ch, say: ch, label: '', kind: 'c' };
   });
   parts.push({ show: word.replace(/\//g, ''), say: word, label: 'อ่านว่า', kind: 'whole' });
@@ -786,7 +803,7 @@ function voiceScore(v) {
   if (/Premwadee|Niwat|Achara/i.test(n) && /natural|online/i.test(n)) return 0;
   if (/natural|online/i.test(n)) return 1;
   if (/google/i.test(n)) return 2;
-  if (/Kanya|Narisa/i.test(n)) return 3;
+  if (/Kanya|Narisa|Pattara/i.test(n)) return 3;
   return 4;
 }
 function pickVoice() {
@@ -802,19 +819,29 @@ if (tts) { pickVoice(); tts.onvoiceschanged = pickVoice; }
 
 let speakToken = 0;
 
-function speak(text, rate = 0.85) {
+/* Some speech engines swallow the first sound right after starting or after a cancel,
+   which makes short syllables like "อี" unclear. Wake the engine once and leave a short gap after a cancel. */
+let ttsWarm = false, lastCancel = 0;
+function warmTTS() {
+  if (ttsWarm || !tts) return; ttsWarm = true;
+  try { const u = new SpeechSynthesisUtterance('อ'); u.lang = 'th-TH'; if (thVoice) u.voice = thVoice; u.volume = 0; u.rate = 2; tts.speak(u); } catch (e) {}
+}
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, warmTTS, { once: true, capture: true }));
+async function speak(text, rate = 0.85) {
+  const gap = 140 - (Date.now() - lastCancel);
+  if (gap > 0) await sleep(gap);
   return new Promise(res => {
     if (!tts) { res(); return; }
     pauseRecForSpeech();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'th-TH'; if (thVoice) u.voice = thVoice; u.rate = Math.max(0.3, Math.min(1.6, rate * (voicePref.rate || 1))); u.pitch = 1.05; u.volume = 1;
+    u.lang = 'th-TH'; if (thVoice) u.voice = thVoice; u.rate = Math.max(0.3, Math.min(1.6, rate * (voicePref.rate || 1))); u.pitch = 1; u.volume = 1;
     let done = false; const fin = () => { if (done) return; done = true; res(); };
     u.onend = fin; u.onerror = fin;
     setTimeout(fin, 1200 + text.length * 400);
     tts.speak(u);
   });
 }
-function stopSpeech() { speakToken++; if (tts) tts.cancel(); }
+function stopSpeech() { speakToken++; if (tts && (tts.speaking || tts.pending)) { tts.cancel(); lastCancel = Date.now(); } }
 
 /* ================= speech recognition ================= */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -861,7 +888,7 @@ function onResult(e) {
   let interim = '', lastFinal = '';
   for (let r = e.resultIndex; r < e.results.length; r++) {
     const res = e.results[r];
-    if (res.isFinal) { const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript); lastFinal = alts[0]; handleFinal(alts); }
+    if (res.isFinal) { const alts = []; for (let k = 0; k < res.length; k++) alts.push(res[k].transcript); lastFinal = alts[0]; handleFinal(alts, res[0].confidence); }
     else interim += res[0].transcript;
   }
   const shown = (interim || lastFinal).trim();
@@ -875,21 +902,32 @@ const cur = { book: null, p: 0, tokens: [], status: [], tent: new Set(), helped:
 function cursorIdx() { for (let i = 0; i < cur.tokens.length; i++) if (cur.tokens[i].readable && !/^ok/.test(cur.status[i])) return i; return -1; }
 
 function matchFrom(start, text) {
-  const t = norm(text); let p = 0, i = start; const matched = [];
+  const t = norm(text); let p = 0, i = start; const matched = []; let near = null;
   while (i < cur.tokens.length) {
     const tk = cur.tokens[i];
     if (!tk.readable || /^ok/.test(cur.status[i])) { i++; continue; }
     const f = findWord(t, tk.alts, p); if (!f) break;
+    if (f.near) { near = { i, heard: f.heard, tone: f.tone, e: f.e }; break; }
     matched.push(i); p = f.e; i++;
   }
-  return { matched, consumed: p, t };
+  return { matched, consumed: p, t, near };
 }
 
-function handleFinal(alts) {
+function handleFinal(alts, conf) {
   const start = cursorIdx(); if (start < 0) return;
+  const c = SC();
   let best = null;
-  for (const a of alts) { const m = matchFrom(start, finalBuf + a); if (!best || m.matched.length > best.matched.length) best = m; }
+  for (const a of alts.slice(0, c.alts)) { const m = matchFrom(start, finalBuf + a); if (!best || m.matched.length > best.matched.length) best = m; }
+  // strict mode: an unsure recogniser result does not count as a clean read of a single word
+  if (c.conf && typeof conf === 'number' && conf > 0 && conf < c.conf && best.matched.length === 1 && !best.near) {
+    best = { matched: [], consumed: 0, t: best.t, near: { i: best.matched[0], heard: alts[0].trim(), tone: false, unsure: true } };
+  }
   best.matched.forEach(markOk);
+  if (best.near && cursorIdx() === best.near.i) {
+    finalBuf = ''; markNear(best.near);
+    if (best.matched.length) sndOk();
+    cur.tent = new Set(); renderText(); flushPops(); return;
+  }
   const rem = best.t.slice(best.consumed);
   const nowIdx = cursorIdx();
   if (nowIdx < 0) { finalBuf = ''; cur.tent = new Set(); renderText(); flushPops(); return pageComplete(); }
@@ -919,7 +957,15 @@ function markOk(i) {
     addScore(i, pts);
   }
 }
-function markWrong(i) {
+function markNear(nr) {
+  const i = nr.i, w = cur.tokens[i].t.replace(/\//g, '');
+  const heard = (nr.heard || '').slice(0, 14);
+  const msg = nr.tone ? 'เกือบถูกแล้ว! ระวังเสียงวรรณยุกต์ของคำว่า "' + w + '" นะ'
+    : nr.unsure ? 'พี่ได้ยินไม่ชัด อ่านคำว่า "' + w + '" ดัง ๆ ชัด ๆ อีกครั้งนะ'
+    : 'เกือบแล้ว! พี่ได้ยินว่า "' + heard + '" ลองอ่านคำว่า "' + w + '" ให้ชัดอีกครั้ง';
+  markWrong(i, msg);
+}
+function markWrong(i, nearMsg) {
   if (/^ok/.test(cur.status[i])) return;
   cur.status[i] = 'wrong'; cur.streak = 0; sndOops();
   lastProgress = Date.now();
@@ -928,7 +974,7 @@ function markWrong(i) {
   const w = cur.tokens[i].t.replace(/\//g, '');
   if (tries === 1) {
     // first slip: let the child try again on their own
-    tutorSay('เกือบแล้ว ลองอ่านคำว่า "' + w + '" อีกครั้งนะ', 'oops');
+    tutorSay(nearMsg || 'ยังไม่ถูกนะ ลองอ่านคำว่า "' + w + '" อีกครั้ง', 'oops');
     renderText();
   } else if (tries === 2 || !autoHelp) {
     openHelp(i, 'ลองอีกครั้ง หรือกด "ช่วยสะกดคำ" / "ช่วยอ่าน" ถ้าอยากให้พี่ช่วย');
@@ -1073,7 +1119,7 @@ async function spellSeq() {
     for (let k = 0; k < parts.length; k++) {
       if (my !== speakToken) return false;
       chips.forEach(c => c.classList.remove('on')); chips[k].classList.add('on');
-      await speak(parts[k].say, parts[k].kind === 'whole' || parts[k].kind === 's' ? 0.7 : 0.75);
+      await speak(parts[k].say, parts[k].kind === 'whole' || parts[k].kind === 's' ? 0.62 : 0.68);
       await sleep(parts[k].kind === 'b' || parts[k].kind === 't' ? 260 : 340);
     }
     chips.forEach(c => c.classList.remove('on'));
@@ -1586,6 +1632,7 @@ $('#pickIn').onchange = e => { const f = [...e.target.files]; e.target.value = '
   const rt = $('#voiceRate'), txt = () => $('#rateTxt').textContent = (voicePref.rate || 1) < 0.95 ? 'ช้า' : (voicePref.rate || 1) > 1.05 ? 'เร็ว' : 'ปกติ';
   rt.value = voicePref.rate || 1; txt(); pickVoice();
   const save = () => lsSet('tsb-voice', voicePref);
+  $('#strictSel').value = strictness; $('#strictSel').onchange = e => { strictness = e.target.value; lsSet('tsb-strict', strictness); };
   $('#voiceSel').onchange = e => { voicePref.name = e.target.value; save(); pickVoice(); };
   rt.oninput = () => { voicePref.rate = +rt.value; txt(); save(); };
   $('#voiceTest').onclick = async () => { stopSpeech(); for (const p of thaiSpell('ข้าว')) { await speak(p.say, 0.75); await sleep(300); } };
