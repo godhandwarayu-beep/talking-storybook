@@ -1068,7 +1068,11 @@ function stopSpeech() { speakToken++; if (hqSrc) { try { hqSrc.stop(); } catch (
       (people talking further away) is not counted as a wrong reading;
    3) heard words that look nothing like the words on the page are ignored. */
 let noiseCut = lsGet('tsb-noisecut', true);
-let micStream = null, micTrack = null, micAnalyser = null, micTimer = null, micBroken = false;
+// Phones and tablets (Android's Google speech service, iOS) cannot share the microphone with the page:
+// opening our own mic there stops speech recognition. On those devices we skip the meter and keep only the word filter.
+const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+let micStream = null, micTrack = null, micAnalyser = null, micTimer = null, micBroken = MOBILE || lsGet('tsb-micbroken', false);
+let heardSinceStart = false, meterWatch = null;
 const levels = [];                      // [time, dBFS]
 async function startMeter() {
   if (!noiseCut || micBroken || micStream || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return null;
@@ -1092,7 +1096,12 @@ async function startMeter() {
     return micTrack;
   } catch (e) { stopMeter(); return null; }
 }
+function giveMicBack() {
+  micBroken = true; lsSet('tsb-micbroken', true); stopMeter();
+  if (listening && !recPaused) setTimeout(() => { if (listening) startRec(); }, 200);
+}
 function stopMeter() {
+  clearTimeout(meterWatch); meterWatch = null;
   clearInterval(micTimer); micTimer = null; micAnalyser = null;
   if (micStream) micStream.getTracks().forEach(t => t.stop());
   micStream = null; micTrack = null; levels.length = 0;
@@ -1146,10 +1155,14 @@ function startRec() {
   rec.onerror = e => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { listening = false; updateMicUI(); showNotice('ยังไม่ได้อนุญาตให้ใช้ไมโครโฟน กดรูปกุญแจ/ไมค์ที่แถบที่อยู่เว็บ แล้วเลือก "อนุญาต"'); }
     else if (e.error === 'network') { showNotice('การฟังเสียงต้องต่ออินเทอร์เน็ต ตรวจสอบสัญญาณแล้วกดไมค์อีกครั้ง'); }
-    else if (e.error === 'audio-capture' && micStream) { micBroken = true; stopMeter(); }   // this device cannot share the mic: listen without the meter
+    else if (micStream && e.error !== 'no-speech' && e.error !== 'aborted') { giveMicBack(); }   // this device cannot share the mic: listen without the meter
   };
   rec.onend = () => { if (listening && !recPaused) setTimeout(() => { if (listening && !recPaused) startRec(); }, 150); };
+  rec.onaudiostart = () => { heardSinceStart = true; };
+  rec.onresult = e => { heardSinceStart = true; onResult(e); };
+  heardSinceStart = false;
   try { if (micTrack && micTrack.readyState === 'live') rec.start(micTrack); else rec.start(); } catch (e) { try { rec.start(); } catch (_) {} }
+  if (micStream) { clearTimeout(meterWatch); meterWatch = setTimeout(() => { if (listening && !recPaused && micStream && !heardSinceStart) giveMicBack(); }, 4000); }
 }
 function pauseRecForSpeech() {
   if (!listening || recPaused) return;
