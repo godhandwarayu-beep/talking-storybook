@@ -151,7 +151,26 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .legend{display:flex;gap:8px 16px;flex-wrap:wrap;font-size:13px;color:var(--ink-faint);margin-top:14px;align-items:center}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:4px;vertical-align:-1px;margin-right:5px}
 
-.helpcard{margin-top:16px;background:linear-gradient(180deg,#fff9ea,#fff);border:1px solid #ffe2a3;border-radius:20px;padding:16px 18px;display:grid;gap:12px;box-shadow:0 10px 26px -14px rgba(224,138,0,.5);animation:rise .25s ease-out}
+.help-scrim{position:fixed;inset:0;z-index:44;background:rgba(19,35,58,.32);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);animation:fadein .2s ease-out;transition:opacity .5s}
+.helpcard{position:fixed;left:50%;top:50%;z-index:46;width:min(600px,calc(100vw - 24px));max-height:calc(100vh - 32px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overflow:auto;
+  transform:translate(-50%,-50%);background:linear-gradient(180deg,#fff9ea,#fff 45%);border:1px solid #ffe2a3;border-radius:28px;padding:20px 20px 18px;display:grid;gap:14px;text-align:center;
+  box-shadow:0 30px 70px -20px rgba(19,35,58,.55),0 0 0 6px rgba(255,176,32,.18);animation:popin .38s cubic-bezier(.2,1.35,.4,1);transition:opacity .5s,transform .5s}
+.helpcard.leaving,.help-scrim.leaving{opacity:0}
+.helpcard.leaving{transform:translate(-50%,-44%) scale(.94)}
+@keyframes popin{from{opacity:0;transform:translate(-50%,-38%) scale(.8)}}
+@keyframes fadein{from{opacity:0}}
+.helpcard .helpword{margin:0;font-size:clamp(46px,13vw,72px);line-height:1.15;color:var(--ink)}
+.helpcard .row.top{justify-content:space-between;align-items:center}
+.helpcard .row.hhead{justify-content:space-between;align-items:center;flex-wrap:nowrap}
+.helpcard .row.hhead .owl{width:46px;height:46px;flex:none}
+.helpcard .row.actions{justify-content:center}
+.helpcard .row.actions .btn{flex:1 1 180px;max-width:240px;min-height:52px;font-size:16px}
+.helpcard .spell{justify-content:center}
+.helpcard .helpmsg{font-size:15px;font-weight:600}
+.help-close{width:40px;height:40px;border-radius:50%;border:0;background:rgba(19,35,58,.06);font-size:22px;line-height:1;display:grid;place-items:center;color:var(--ink-soft)}
+.round-dots{display:inline-flex;gap:6px;vertical-align:middle;margin-left:6px}
+.round-dots i{width:9px;height:9px;border-radius:50%;background:#f1d9a0}
+.round-dots i.on{background:var(--sun-deep)}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}}
 .helpcard .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .helpword{font-family:var(--f-read);font-size:clamp(34px,6vw,50px);font-weight:700;line-height:1.2;margin-right:auto}
@@ -259,8 +278,6 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
   #btnListen span{display:none}
   .legend span{display:none}
   .helpcard{padding:14px}
-  .helpword{flex-basis:100%}
-  .helpcard .row .btn{flex:1 1 40%}
   .chip{min-width:52px;padding:6px 8px}.chip b{font-size:25px}.chip span{font-size:11px}
   .chip.gap{margin-left:10px}
   .tutor .owl{width:44px;height:44px}
@@ -379,15 +396,19 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
           <button class="btn" id="btnListen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg><span>ฟังทั้งหน้า</span></button>
         </div>
 
-        <div class="helpcard" id="helpCard" hidden>
-          <div class="row">
-            <div class="helpword" id="helpWord"></div>
+        <div class="help-scrim" id="helpScrim" hidden></div>
+        <div class="helpcard" id="helpCard" role="dialog" aria-live="polite" aria-label="พี่ฮูกช่วยอ่าน" hidden>
+          <div class="row hhead">
+            <svg class="owl" data-owl viewBox="0 0 80 80" aria-hidden="true"></svg>
+            <div class="helpmsg" id="helpMsg"></div>
+            <button class="help-close" id="btnHelpClose" aria-label="ปิด">×</button>
+          </div>
+          <div class="helpword" id="helpWord"></div>
+          <div class="spell" id="spellBox"></div>
+          <div class="row actions" id="helpActions">
             <button class="btn" id="btnSpell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18l4-12 4 12M4.5 14h5M14 6h4a3 3 0 0 1 0 6h-4zm0 6h5a3 3 0 0 1 0 6h-5z"/></svg>ช่วยสะกดคำ</button>
             <button class="btn primary" id="btnSay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>ช่วยอ่าน</button>
-            <button class="btn ghost" id="btnHelpClose" aria-label="ปิด">ปิด</button>
           </div>
-          <div class="helpmsg" id="helpMsg"></div>
-          <div class="spell" id="spellBox"></div>
         </div>
 
         <div class="done-banner" id="doneBanner" hidden>
@@ -882,45 +903,92 @@ function showSummary() {
   $('#summary').hidden = false; confetti();
 }
 
-/* ---- help ---- */
+/* ---- help: a card that pops over the page, teaches, then fades away ---- */
+let helpFadeT = null;
+function cancelFade() { clearTimeout(helpFadeT); helpFadeT = null; $('#helpCard').classList.remove('leaving'); $('#helpScrim').classList.remove('leaving'); }
+function fadeHelp(wait) {
+  cancelFade();
+  helpFadeT = setTimeout(() => {
+    $('#helpCard').classList.add('leaving'); $('#helpScrim').classList.add('leaving');
+    helpFadeT = setTimeout(closeHelp, 520);
+  }, wait);
+}
 function openHelp(i, msg) {
+  cancelFade();
   cur.helpIdx = i; const tk = cur.tokens[i];
   $('#helpWord').textContent = tk.t.replace(/\//g, '');
-  $('#helpMsg').textContent = msg || 'กดปุ่มให้ช่วยสะกดหรือช่วยอ่าน แล้วลองอ่านเองอีกครั้ง';
+  $('#helpMsg').textContent = msg || 'อยากให้พี่ช่วยแบบไหน';
   $('#spellBox').innerHTML = '';
-  $('#helpCard').hidden = false; renderText();
+  $('#helpActions').hidden = false;
+  $('#helpScrim').hidden = false; $('#helpCard').hidden = false; renderText();
+  if (!cur.talking) fadeHelp(9000);   // offer only: disappears by itself if nobody taps
 }
-function closeHelp() { cur.helpIdx = -1; $('#helpCard').hidden = true; $('#spellBox').innerHTML = ''; if (cur.book) renderText(); }
+function closeHelp() {
+  clearTimeout(helpFadeT); helpFadeT = null;
+  cur.helpIdx = -1;
+  ['#helpCard', '#helpScrim'].forEach(id => { $(id).hidden = true; $(id).classList.remove('leaving'); });
+  $('#spellBox').innerHTML = '';
+  if (cur.book) renderText();
+}
 function noteHelp(i) { if (!cur.helped.has(i)) { cur.helped.add(i); cur.stats[cur.p].helps++; } }
+const roundDots = (r, n) => '<span class="round-dots">' + Array.from({ length: n }, (_, k) => `<i class="${k < r ? 'on' : ''}"></i>`).join('') + '</span>';
 
 async function doSay() {
-  const i = cur.helpIdx; if (i < 0) return; noteHelp(i);
-  stopSpeech(); cur.talking = true; if (listening) pauseRecForSpeech();
-  try { await speak(cur.tokens[i].t.replace(/\//g, ''), 0.6); } finally { cur.talking = false; lastProgress = Date.now(); }
-  $('#helpMsg').textContent = 'ตาหนูแล้ว ลองอ่านตามเลย';
-  tutorSay('ตาหนูแล้ว อ่านตามพี่เลยนะ');
+  const i = cur.helpIdx; if (i < 0 || cur.talking) return; noteHelp(i);
+  cancelFade(); stopSpeech(); const my = ++speakToken;
+  cur.talking = true; if (listening) pauseRecForSpeech();
+  $('#helpActions').hidden = true;
+  const w = cur.tokens[i].t.replace(/\//g, '');
+  try {
+    for (let r = 1; r <= 2; r++) {
+      if (my !== speakToken) return;
+      $('#helpMsg').innerHTML = 'ฟังพี่อ่านนะ' + roundDots(r, 2);
+      await speak(w, 0.6); await sleep(500);
+    }
+  } finally { cur.talking = false; lastProgress = Date.now(); }
+  if (my !== speakToken || cur.helpIdx !== i) return;
+  $('#helpMsg').textContent = 'ตาหนูแล้ว อ่านตามเลย';
+  tutorSay('ตาหนูแล้ว อ่านคำว่า "' + w + '" ตามพี่เลยนะ');
+  fadeHelp(1400);
 }
 async function doSpell() {
   if (cur.talking) return;
+  const i = cur.helpIdx; if (i < 0) return;
+  cancelFade();
   cur.talking = true; if (listening) pauseRecForSpeech();
-  try { await spellSeq(); } finally { cur.talking = false; lastProgress = Date.now(); }
-  if (cur.helpIdx >= 0) tutorSay('ตาหนูแล้ว ลองอ่านคำนี้ดูนะ');
+  let ok = false;
+  try { ok = await spellSeq(); } finally { cur.talking = false; lastProgress = Date.now(); }
+  if (!ok || cur.helpIdx !== i) return;
+  $('#helpMsg').textContent = 'ตาหนูแล้ว ลองอ่านคำนี้ดูนะ';
+  tutorSay('ตาหนูแล้ว ลองอ่านคำว่า "' + cur.tokens[i].t.replace(/\//g, '') + '" ดูนะ');
+  fadeHelp(1600);
 }
 async function spellSeq() {
-  const i = cur.helpIdx; if (i < 0) return; noteHelp(i);
+  const i = cur.helpIdx; if (i < 0) return false; noteHelp(i);
   stopSpeech(); const my = ++speakToken;
+  $('#helpActions').hidden = true;
   const parts = spellParts(cur.tokens[i].t, cur.spellMap);
   $('#spellBox').innerHTML = parts.map((p, k) => `<div class="chip ${p.kind}${k > 0 && p.sy !== undefined && p.sy !== parts[k - 1].sy ? ' gap' : ''}" data-k="${k}"><b>${esc(p.show)}</b><span>${esc(p.label)}</span></div>`).join('');
   const chips = [...$('#spellBox').children];
-  for (let k = 0; k < parts.length; k++) {
-    if (my !== speakToken) return;
-    chips.forEach(c => c.classList.remove('on')); chips[k].classList.add('on');
-    await speak(parts[k].say, parts[k].kind === 'whole' ? 0.65 : 0.8);
-    await sleep(180);
+  for (let r = 1; r <= 2; r++) {
+    $('#helpMsg').innerHTML = (r === 1 ? 'ฟังพี่ฮูกสะกดนะ' : 'อีกรอบ สะกดตามพี่ไปด้วยนะ') + roundDots(r, 2);
+    for (let k = 0; k < parts.length; k++) {
+      if (my !== speakToken) return false;
+      chips.forEach(c => c.classList.remove('on')); chips[k].classList.add('on');
+      await speak(parts[k].say, parts[k].kind === 'whole' ? 0.65 : 0.8);
+      await sleep(180);
+    }
+    chips.forEach(c => c.classList.remove('on'));
+    if (r === 1) await sleep(700);
   }
-  chips.forEach(c => c.classList.remove('on'));
-  $('#helpMsg').textContent = 'ตาหนูแล้ว ลองอ่านคำนี้ดูนะ';
+  return my === speakToken;
 }
+(function initHelpCard() {
+  // live at the top level so nothing in the page can clip or scroll it
+  document.body.appendChild($('#helpScrim')); document.body.appendChild($('#helpCard'));
+  $('#helpScrim').addEventListener('click', () => { stopSpeech(); cur.talking = false; closeHelp(); });
+  $('#helpCard').addEventListener('pointerdown', () => { if (!cur.talking && helpFadeT) fadeHelp(9000); });
+})();
 
 /* ---- read-along ---- */
 async function readAlong() {
