@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>นิทานพูดได้</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f9b8e">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&family=Sarabun:wght@500;600;700&display=swap">
@@ -1331,6 +1335,7 @@ function setTentative(interim) {
 }
 
 function markOk(i) {
+  if (!cur.stats[cur.p].startAt) cur.stats[cur.p].startAt = Date.now();
   const helped = cur.helped.has(i) || cur.status[i] === 'wrong';
   cur.status[i] = helped ? 'okHelp' : 'ok';
   lastProgress = Date.now();
@@ -1418,6 +1423,7 @@ function showDoneBanner() {
 }
 function pageComplete() {
   cur.stats[cur.p].done = true;
+  cur.stats[cur.p].endAt = Date.now();
   stopListening(); closeHelp(); renderText();
   sndPage(); confetti(); showDoneBanner();
   tutorSay('อ่านครบหน้านี้แล้ว เก่งที่สุดเลย! ตอนนี้มี ' + cur.score + ' คะแนน');
@@ -1654,7 +1660,7 @@ $('#recImportFile').onchange = async e => {
 
 /* ================= views ================= */
 let books = [], teacher = lsGet('tsb-teacher', false);
-function show(v) { ['vLib', 'vRead', 'vEdit', 'vRec'].forEach(id => $('#' + id).hidden = id !== v); window.scrollTo(0, 0); }
+function show(v) { document.querySelectorAll('.wrap > section').forEach(sec => sec.hidden = sec.id !== v); window.scrollTo(0, 0); document.dispatchEvent(new CustomEvent('tsb:view', { detail: v })); }
 
 /* keep tablets/phones awake while a book is open */
 let wakeLock = null;
@@ -1666,8 +1672,9 @@ async function keepAwake(on) {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && cur.book) keepAwake(true); });
 
-function openBook(book) {
+function openReader(book, startPage = 0, mode = 'free') {
   keepAwake(true);
+  cur.mode = mode;
   cur.book = book; cur.spellMap = parseSpellMap(book.spell);
   cur.stats = book.pages.map(() => ({ done: false, helps: 0, wrongs: 0, skips: 0 }));
   cur.score = 0; cur.streak = 0; cur.pops = []; cur.pageScore = {};
@@ -1677,8 +1684,9 @@ function openBook(book) {
   $('#srNotice').hidden = true;
   if (!SR) showNotice('อุปกรณ์หรือเบราว์เซอร์นี้ยังฟังเสียงพูดไม่ได้ กรุณาเปิดด้วย Google Chrome (ยังใช้ปุ่มฟัง/ช่วยอ่านได้ตามปกติ)');
   else if (tts && !thVoice) setTimeout(() => { if (!thVoice) showNotice('เครื่องนี้ยังไม่มีเสียงอ่านภาษาไทย ปุ่ม "ช่วยอ่าน" อาจไม่มีเสียง (ติดตั้งเสียงไทยในการตั้งค่าเครื่อง)'); }, 1500);
-  show('vRead'); loadPage(0);
+  show('vRead'); loadPage(startPage);
 }
+function openBook(book) { openReader(book, 0); }   // replaced by the cover + stage map in js/stages.js
 function leaveReader() { keepAwake(false); stopListening(); stopReadAlong(); stopSpeech(); closeHelp(); cur.book = null; show('vLib'); renderShelf(); }
 
 function renderShelf() {
@@ -1689,15 +1697,18 @@ function renderShelf() {
   $('#shelf').innerHTML = all.map(b => `
     <div class="book-wrap">
       <button class="book" data-open="${esc(b.id)}">
-        ${b.pages[0] && b.pages[0].img ? `<img class="cover" src="${b.pages[0].img}" alt="">` : '<div class="cover"></div>'}
-        <span class="meta"><span class="t">${esc(b.title)}</span><span class="n">${b.pages.length} หน้า${b.builtin ? ' · เรื่องตัวอย่าง' : ''}</span></span>
+        ${(b.cover || (b.pages[0] && b.pages[0].img)) ? `<img class="cover" src="${b.cover || b.pages[0].img}" alt="">` : '<div class="cover"></div>'}
+        ${window.bookBadge ? bookBadge(b) : ''}
+        <span class="meta"><span class="t">${esc(b.title)}</span><span class="n">${b.pages.length} ด่าน${b.builtin ? ' · เรื่องตัวอย่าง' : ''}${window.bookProgressText ? bookProgressText(b) : ''}</span></span>
       </button>
       ${teacher ? `<div class="book-tools">
         <button class="btn" data-edit="${esc(b.id)}">แก้ไข</button>
         <button class="btn" data-export="${esc(b.id)}">ส่งออก</button>
+        ${window.libraryUploadButton ? libraryUploadButton(b) : ''}
         ${b.builtin ? '' : `<button class="btn danger" data-del="${esc(b.id)}">ลบ</button>`}
       </div>` : ''}
     </div>`).join('');
+  document.dispatchEvent(new CustomEvent('tsb:shelf'));
 }
 function mergedBooks() {
   const ids = new Set(books.map(b => b.id));
@@ -1709,7 +1720,7 @@ async function reloadBooks() { books = await store.all(); renderShelf(); }
 
 /* ---- export / import ---- */
 async function exportBook(b) {
-  const data = { format: 'talking-storybook', version: 2, id: b.id, title: b.title, spell: b.spell || '', pages: b.pages };
+  const data = { format: 'talking-storybook', version: 3, id: b.id, title: b.title, spell: b.spell || '', cover: b.cover || '', questions: b.questions || [], pages: b.pages };
   // attach the high-quality voice so students' devices can play it without a key
   const phrases = bookPhrases(b);
   const audio = {}; let have = 0;
@@ -1733,7 +1744,7 @@ async function exportBook(b) {
 function validBook(d) { return d && Array.isArray(d.pages) && d.pages.length && typeof d.title === 'string'; }
 async function importJSON(d) {
   if (!validBook(d)) throw new Error('bad');
-  const b = { id: d.id && !d.builtin ? d.id : uid(), title: d.title, spell: d.spell || '', pages: d.pages.map(p => ({ img: p.img || '', text: p.text || '' })), updated: Date.now() };
+  const b = { id: d.id && !d.builtin ? d.id : uid(), title: d.title, spell: d.spell || '', cover: d.cover || '', questions: Array.isArray(d.questions) ? d.questions : [], pages: d.pages.map(p => ({ img: p.img || '', text: p.text || '' })), updated: Date.now() };
   if (d.audio && typeof d.audio === 'object') { for (const [k, v] of Object.entries(d.audio)) { try { const pcm = b64ToInt16(v); hqMem.set(k, pcm); await hqDB.put(k, pcm.buffer.slice(0)); } catch (e) {} } }
   await store.put(b); await reloadBooks(); return b;
 }
@@ -1741,11 +1752,12 @@ async function importJSON(d) {
 /* ================= editor ================= */
 let draft = null, editingId = null;
 function openEditor(book) {
-  editingId = book ? book.id : null;
-  draft = book ? JSON.parse(JSON.stringify({ title: book.title, spell: book.spell || '', pages: book.pages })) : { title: '', spell: '', pages: [{ img: '', text: '' }] };
+  editingId = book && book.id ? book.id : null;
+  draft = book ? JSON.parse(JSON.stringify({ title: book.title, spell: book.spell || '', cover: book.cover || '', questions: book.questions || [], pages: book.pages })) : { title: '', spell: '', cover: '', questions: [], pages: [{ img: '', text: '' }] };
   $('#edHeading').textContent = book ? 'แก้ไขนิทาน' : 'สร้างนิทานใหม่';
   $('#edTitle').value = draft.title; $('#edSpell').value = draft.spell; $('#bulkText').value = '';
   renderPages(); show('vEdit');
+  document.dispatchEvent(new CustomEvent('tsb:editorOpen'));
 }
 function previewHTML(text) {
   const tks = tokenize(text);
@@ -1786,13 +1798,13 @@ function compressImage(file) {
     img.src = url;
   });
 }
-function collectDraft() { draft.title = $('#edTitle').value.trim(); draft.spell = $('#edSpell').value; }
+function collectDraft() { draft.title = $('#edTitle').value.trim(); draft.spell = $('#edSpell').value; document.dispatchEvent(new CustomEvent('tsb:collectDraft')); }
 async function saveDraft() {
   collectDraft();
   if (!draft.title) { toast('ใส่ชื่อนิทานก่อนนะครับ'); $('#edTitle').focus(); return null; }
   const pages = draft.pages.filter(p => p.img || p.text.trim()).map(p => ({ img: p.img, text: p.text }));
   if (!pages.length) { toast('ต้องมีอย่างน้อย 1 หน้าที่มีภาพหรือคำอ่าน'); return null; }
-  const b = { id: editingId || uid(), title: draft.title, spell: draft.spell, pages, updated: Date.now() };
+  const b = { id: editingId || uid(), title: draft.title, spell: draft.spell, cover: draft.cover || '', questions: draft.questions || [], pages, updated: Date.now() };
   try { await store.put(b); } catch (e) { toast('บันทึกไม่สำเร็จ พื้นที่ในเครื่องอาจเต็ม ลองลดจำนวนภาพ'); return null; }
   editingId = b.id; await reloadBooks(); return b;
 }
@@ -2210,14 +2222,22 @@ $('#btnEdSave').onclick = async () => { const b = await saveDraft(); if (b) { to
 $('#btnEdTry').onclick = async () => { const b = await saveDraft(); if (b) openBook(b); };
 
 /* ================= boot ================= */
-(async function boot() {
+window.addEventListener('load', async function boot() {
   await reloadBooks();
+  document.dispatchEvent(new CustomEvent('tsb:boot'));
   const q = new URLSearchParams(location.search).get('book');
   if (q) {
     try { const r = await fetch(q); const b = await importJSON(await r.json()); openBook(findBook(b.id)); }
     catch (e) { toast('เปิดไฟล์นิทานจากลิงก์ไม่ได้'); }
   }
-})();
+});
 </script>
+<script src="config.js"></script>
+<script src="js/core-ext.js"></script>
+<script src="js/student.js"></script>
+<script src="js/stages.js"></script>
+<script src="js/practice.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/teacher.js"></script>
 </body>
 </html>
