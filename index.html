@@ -282,6 +282,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
   .textcard .controls .spacer{display:none}
   .mic-label{flex:1;min-width:0;font-size:14px}
   #btnSkip,#btnListen{padding:10px 12px;flex:none}
+  #btnRestart{padding:8px 12px;min-height:40px;font-size:13px}
   .helpcard{padding:14px}
   .chip{min-width:52px;padding:6px 8px}.chip b{font-size:25px}.chip span{font-size:11px}
   .chip.gap{margin-left:10px}
@@ -403,7 +404,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
             <select id="gemVoice"><option value="Kore">Kore · ผู้หญิง ชัดเจน</option><option value="Leda">Leda · ผู้หญิง สดใส</option><option value="Aoede">Aoede · ผู้หญิง นุ่มนวล</option><option value="Puck">Puck · ผู้ชาย ร่าเริง</option><option value="Charon">Charon · ผู้ชาย สุภาพ</option></select></label>
           <label class="f" for="ttsModel">โมเดลเสียง <small>เปลี่ยนได้ถ้า Google ออกรุ่นใหม่</small><input type="text" id="ttsModel" spellcheck="false"></label>
           <label class="f" for="voiceSel">เสียงในเครื่อง (สำรอง) <small>บนคอมพิวเตอร์ แนะนำเปิดด้วย Microsoft Edge จะมีเสียง Premwadee / Niwat ที่ชัดกว่า Chrome มาก</small><select id="voiceSel"></select></label>
-          <label class="f" for="voiceRate">ความเร็วในการพูด <small id="rateTxt"></small><input type="range" id="voiceRate" min="0.6" max="1.3" step="0.05"></label>
+          <label class="f" for="voiceRate">ความเร็วในการพูด <small>แนะนำ "ปกติ" ถ้าช้าเกินไปเสียงสระสั้นจะถูกลากยาวจนเพี้ยน · <span id="rateTxt"></span></small><input type="range" id="voiceRate" min="0.85" max="1.25" step="0.05"></label>
           <label class="f" for="strictSel">การตรวจเสียงอ่านของนักเรียน <small>ปกติ = ต้องออกเสียงและวรรณยุกต์ถูก ถ้าเพี้ยนเล็กน้อยพี่ฮูกจะบอกว่า "เกือบแล้ว" ให้อ่านใหม่</small>
             <select id="strictSel"><option value="easy">ผ่อนปรน (สำหรับเด็กที่เพิ่งเริ่ม)</option><option value="normal">ปกติ</option><option value="strict">เข้มงวด (ต้องอ่านชัดมาก)</option></select></label>
           <label class="opt" for="noiseCut"><input type="checkbox" id="noiseCut"><span>ตัดเสียงรบกวน<small>กรองเสียงรอบข้าง ไม่นับเสียงคุยที่อยู่ไกล หรือคำที่ไม่เกี่ยวกับเนื้อเรื่อง</small></span></label>
@@ -420,6 +421,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
     <div class="rbar">
       <button class="btn ghost" id="btnBack" aria-label="กลับชั้นหนังสือ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>ชั้นหนังสือ</button>
       <h2 id="rTitle"></h2>
+      <button class="btn" id="btnRestart" aria-label="เริ่มหน้านี้ใหม่"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg><span>เริ่มใหม่</span></button>
       <span class="streak" id="rStreak"></span>
       <span class="score" id="rScore" aria-label="คะแนน">★ 0</span>
       <span class="pager" id="rPager"></span>
@@ -993,11 +995,11 @@ const hqDB = (() => {
   const run = async (mode, fn) => { const db = await open(); if (!db) return null; return new Promise(res => { try { const t = db.transaction('clips', mode); const rq = fn(t.objectStore('clips')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => res(null); } catch (e) { res(null); } }); };
   return { get: k => run('readonly', s => s.get(k)), put: (k, v) => run('readwrite', s => s.put(v, k)), clear: () => run('readwrite', s => s.clear()), keys: () => run('readonly', s => s.getAllKeys()) };
 })();
-const hqKey = (text, slow) => (voicePref.gemVoice || 'Kore') + '|' + (slow ? 's' : 'n') + '|' + text;
+const hqKey = (text, slow) => 'v2|' + (voicePref.gemVoice || 'Kore') + '|' + (slow ? 's' : 'n') + '|' + text;   // v2: natural pace (old slowed clips are not reused)
 const hqConfigured = () => voicePref.engine !== 'device' && !!ocrCfg().key.trim();
 function hqPrompt(text, slow) {
-  return (slow ? 'Say this Thai text very slowly and clearly, like a kind Thai teacher teaching a young child to read. Pronounce every sound and tone exactly. Say only the text: '
-               : 'Say this Thai text clearly and naturally, like a kind Thai teacher reading to a child. Say only the text: ') + text;
+  // never ask for slow speech: stretching turns short vowels (อะ โอะ เอะ) into long ones and bends the tones
+  return 'Say this Thai text clearly at a normal speaking pace, like a Thai teacher helping a child spell. Do not stretch the sound: short vowels (อะ อิ อึ อุ เอะ แอะ โอะ เอาะ เออะ) stay short and crisp, long vowels stay long, and the tone must be exact. Say only the text: ' + text;
 }
 function b64ToInt16(b64) { const bin = atob(b64), n = bin.length >> 1, out = new Int16Array(n); for (let i = 0; i < n; i++) out[i] = (bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8)) << 16 >> 16; return out; }
 function int16ToB64(a) { const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
@@ -1052,8 +1054,8 @@ function bookPhrases(b) {
   b.pages.forEach(pg => tokenize(pg.text).forEach(tk => {
     if (!tk.readable) return;
     const w = tk.t.replace(/\//g, '');
-    out.set(hqKey(w, false), [w, false]); out.set(hqKey(w, true), [w, true]);
-    (spellParts(tk.t, map) || []).forEach(p => out.set(hqKey(p.say, true), [p.say, true]));
+    out.set(hqKey(w, false), [w, false]);
+    (spellParts(tk.t, map) || []).forEach(p => out.set(hqKey(p.say, false), [p.say, false]));
   }));
   return [...out.values()];
 }
@@ -1080,7 +1082,7 @@ async function recClip(text) {
   return null;
 }
 async function speak(text, rate = 0.85) {
-  const slow = rate <= 0.75, my = speakToken;
+  const slow = false, my = speakToken;   // one natural-pace clip per text
   const mine = await recClip(text);
   if (my !== speakToken) return;
   if (mine) return playPcm(mine);
@@ -1442,7 +1444,7 @@ function fadeHelp(wait) {
 }
 function openHelp(i, msg) {
   cancelFade();
-  { const tw = cur.tokens[i].t.replace(/\//g, ''); hqPrefetch([[tw, true], ...spellParts(cur.tokens[i].t, cur.spellMap).map(p => [p.say, true])]); }
+  { const tw = cur.tokens[i].t.replace(/\//g, ''); hqPrefetch([[tw, false], ...spellParts(cur.tokens[i].t, cur.spellMap).map(p => [p.say, false])]); }
   cur.helpIdx = i; const tk = cur.tokens[i];
   $('#helpWord').textContent = tk.t.replace(/\//g, '');
   $('#helpMsg').textContent = msg || 'อยากให้พี่ช่วยแบบไหน';
@@ -1471,7 +1473,7 @@ async function doSay() {
     for (let r = 1; r <= 2; r++) {
       if (my !== speakToken) return;
       $('#helpMsg').innerHTML = 'ฟังพี่อ่านนะ' + roundDots(r, 2);
-      await speak(w, 0.6); await sleep(500);
+      await speak(w, 1); await sleep(600);
     }
   } finally { cur.talking = false; lastProgress = Date.now(); }
   if (my !== speakToken || cur.helpIdx !== i) return;
@@ -1503,8 +1505,9 @@ async function spellSeq() {
     for (let k = 0; k < parts.length; k++) {
       if (my !== speakToken) return false;
       chips.forEach(c => c.classList.remove('on')); chips[k].classList.add('on');
-      await speak(parts[k].say, parts[k].kind === 'whole' || parts[k].kind === 's' ? 0.62 : 0.68);
-      await sleep(parts[k].kind === 'b' || parts[k].kind === 't' ? 260 : 340);
+      // normal speed for every part (slowing down distorts short/long vowels); clarity comes from the pause between parts
+      await speak(parts[k].say, 1);
+      await sleep(parts[k].kind === 'whole' || parts[k].kind === 's' ? 550 : 420);
     }
     chips.forEach(c => c.classList.remove('on'));
     if (r === 1) await sleep(900);
@@ -1528,7 +1531,7 @@ async function readAlong() {
     if (my !== speakToken || !cur.readingAlong) break;
     const tk = cur.tokens[i]; if (!tk.readable) continue;
     cur.readingIdx = i; renderText();
-    await speak(tk.t.replace(/\//g, ''), 0.85);
+    await speak(tk.t.replace(/\//g, ''), 1);
   }
   stopReadAlong();
 }
@@ -1628,7 +1631,7 @@ $('#recSections').addEventListener('click', async e => {
   const card = e.target.closest('.rec-card'); if (!card) return;
   const t = card.dataset.t;
   if (e.target.closest('[data-rec]')) startRecording(t, card);
-  else if (e.target.closest('[data-play]')) { stopSpeech(); const own = await recClip(t); if (own) playPcm(own); else speak(t, 0.7); }
+  else if (e.target.closest('[data-play]')) { stopSpeech(); const own = await recClip(t); if (own) playPcm(own); else speak(t, 1); }
 });
 $('#recExport').onclick = async () => {
   const keys = (await hqDB.keys() || []).filter(k => typeof k === 'string' && k.startsWith('rec|'));
@@ -1667,7 +1670,7 @@ function openBook(book) {
   keepAwake(true);
   cur.book = book; cur.spellMap = parseSpellMap(book.spell);
   cur.stats = book.pages.map(() => ({ done: false, helps: 0, wrongs: 0, skips: 0 }));
-  cur.score = 0; cur.streak = 0; cur.pops = [];
+  cur.score = 0; cur.streak = 0; cur.pops = []; cur.pageScore = {};
   $('#rScore').textContent = '★ 0'; $('#rStreak').textContent = '';
   $('#autoHelp').checked = autoHelp;
   $('#rTitle').textContent = book.title;
@@ -1990,7 +1993,7 @@ function tutorSay(msg, mood) {
   const o = $('#owl'); o.classList.remove('hop', 'shake'); void o.getBoundingClientRect(); o.classList.add(mood === 'oops' ? 'shake' : 'hop');
 }
 function addScore(i, pts) {
-  cur.score += pts;
+  cur.score += pts; cur.pageScore = cur.pageScore || {}; cur.pageScore[cur.p] = (cur.pageScore[cur.p] || 0) + pts;
   const s = $('#rScore'); s.textContent = '★ ' + cur.score; s.classList.remove('bump'); void s.offsetWidth; s.classList.add('bump');
   $('#rStreak').textContent = cur.streak >= 3 ? 'อ่านถูกติดกัน ' + cur.streak + ' คำ' : '';
   cur.pops.push([i, pts]);
@@ -2093,6 +2096,23 @@ function skipWord(i) {
   if (cursorIdx() < 0) pageComplete();
 }
 $('#btnSkip').onclick = () => skipWord(cursorIdx());
+/* start the current page again: clear its colours, stars and the points earned on it */
+$('#btnRestart').onclick = () => {
+  const b = $('#btnRestart');
+  if (b.dataset.confirm !== '1') {          // second tap confirms, so a stray tap does not wipe the page
+    b.dataset.confirm = '1'; b.querySelector('span').textContent = 'แตะอีกครั้ง';
+    clearTimeout(b._t); b._t = setTimeout(() => { b.dataset.confirm = ''; b.querySelector('span').textContent = 'เริ่มใหม่'; }, 2500);
+    return;
+  }
+  clearTimeout(b._t); b.dataset.confirm = ''; b.querySelector('span').textContent = 'เริ่มใหม่';
+  const p = cur.p;
+  cur.score -= (cur.pageScore && cur.pageScore[p]) || 0; if (cur.pageScore) cur.pageScore[p] = 0;
+  cur.streak = 0; cur.stats[p] = { done: false, helps: 0, wrongs: 0, skips: 0 };
+  finalBuf = ''; committed = {};
+  $('#rScore').textContent = '★ ' + cur.score; $('#rStreak').textContent = '';
+  loadPage(p);
+  tutorSay('เริ่มหน้านี้ใหม่นะ กดไมค์แล้วอ่านตั้งแต่คำแรกเลย');
+};
 $('#btnHelpSkip').onclick = () => skipWord(cur.helpIdx);
 $('#btnPrev').onclick = () => loadPage(cur.p - 1);
 $('#btnNext').onclick = () => loadPage(cur.p + 1);
@@ -2157,7 +2177,7 @@ $('#pickIn').onchange = e => { const f = [...e.target.files]; e.target.value = '
 })();
 (function initVoiceSettings() {
   const rt = $('#voiceRate'), txt = () => $('#rateTxt').textContent = (voicePref.rate || 1) < 0.95 ? 'ช้า' : (voicePref.rate || 1) > 1.05 ? 'เร็ว' : 'ปกติ';
-  rt.value = voicePref.rate || 1; txt(); pickVoice();
+  voicePref.rate = Math.max(0.85, Math.min(1.25, voicePref.rate || 1)); rt.value = voicePref.rate; txt(); pickVoice();
   const save = () => lsSet('tsb-voice', voicePref);
   $('#noiseCut').checked = noiseCut; $('#noiseCut').onchange = e => { noiseCut = e.target.checked; lsSet('tsb-noisecut', noiseCut); if (!noiseCut) stopMeter(); };
   $('#strictSel').value = strictness; $('#strictSel').onchange = e => { strictness = e.target.value; lsSet('tsb-strict', strictness); };
@@ -2171,9 +2191,9 @@ $('#pickIn').onchange = e => { const f = [...e.target.files]; e.target.value = '
   $('#voiceTest').onclick = async () => {
     stopSpeech(); const b = $('#voiceTest'); b.disabled = true;
     const parts = thaiSpell('ข้าว');
-    if (hqConfigured()) { b.textContent = 'กำลังเตรียมเสียง…'; for (const p of parts) await hqClip(p.say, true); }
+    if (hqConfigured()) { b.textContent = 'กำลังเตรียมเสียง…'; for (const p of parts) await hqClip(p.say, false); }
     b.textContent = 'ลองฟัง: สะกดคำว่า "ข้าว"'; b.disabled = false; showHqStatus();
-    for (const p of parts) { await speak(p.say, 0.7); await sleep(300); }
+    for (const p of parts) { await speak(p.say, 1); await sleep(420); }
   };
   $('#voiceClear').onclick = async () => { await hqDB.clear(); hqMem.clear(); toast('ล้างเสียงที่เก็บไว้แล้ว'); };
 })();
