@@ -129,6 +129,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .w.tent{--fill:#dcf6ea;background-size:55% 100%}
 .w.ok{--fill:var(--leaf-bg);background-size:100% 100%;color:#0b6a43}
 .w.okHelp{--fill:var(--amber-bg);background-size:100% 100%;color:#6b4800}
+.w.okSkip{--fill:#e6ebf2;background-size:100% 100%;color:var(--ink-faint)}
 .w.wrong{--fill:var(--coral-bg);background-size:100% 100%;color:#b0202f;animation:wob .4s}
 .w.help{box-shadow:inset 0 0 0 2.5px var(--sun)}
 .w.speaking{--fill:#d8e5ff;background-size:100% 100%;color:#1c46a8;transition:background-size .35s linear}
@@ -277,6 +278,10 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
   .mic-label{font-size:15px}.mic-label small{display:none}
   #btnListen span{display:none}
   .legend span{display:none}
+  .textcard .controls{flex-wrap:nowrap;gap:8px;padding:10px}
+  .textcard .controls .spacer{display:none}
+  .mic-label{flex:1;min-width:0;font-size:14px}
+  #btnSkip,#btnListen{padding:10px 12px;flex:none}
   .helpcard{padding:14px}
   .chip{min-width:52px;padding:6px 8px}.chip b{font-size:25px}.chip span{font-size:11px}
   .chip.gap{margin-left:10px}
@@ -328,6 +333,18 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
 .mic.live.meter::after{animation:none;opacity:0}
 .heard.ignored{color:var(--ink-faint);text-decoration:line-through}
 
+.rec-intro{margin-bottom:22px}
+.rec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:26px}
+.rec-card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px;display:grid;gap:8px;justify-items:center;box-shadow:var(--shadow-sm);position:relative}
+.rec-card b{font-family:var(--f-read);font-size:30px;line-height:1.4}
+.rec-card.has{border-color:#b5ecd0;background:linear-gradient(180deg,#f1fcf6,#fff)}
+.rec-card.has::after{content:"✓";position:absolute;top:8px;right:12px;color:var(--leaf);font-weight:800}
+.rec-card .prow{justify-content:center}
+.rec-btn .dot{width:10px;height:10px;border-radius:50%;background:var(--coral);display:inline-block}
+.rec-card.recording{border-color:var(--coral);box-shadow:0 0 0 4px rgba(239,79,95,.2)}
+.rec-card.recording .dot{animation:blink .8s infinite}
+@keyframes blink{50%{opacity:.2}}
+
 /* confetti */
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:3px;animation:fall 1.8s ease-in forwards}
@@ -365,6 +382,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
       <button class="btn primary" id="btnNew"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>สร้างนิทานใหม่</button>
       <button class="btn" id="btnImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>นำเข้าไฟล์นิทาน (.json)</button>
       <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <button class="btn" id="btnRecView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>อัดเสียงครูสำหรับสะกดคำ</button>
       <span class="hint">นิทานเก็บไว้ในเครื่องนี้ ใช้ "ส่งออก" เพื่อนำไฟล์ไปเปิดในเครื่องนักเรียน</span>
       <details class="settings">
         <summary>ตั้งค่าการอ่านตัวหนังสือจากภาพ</summary>
@@ -421,6 +439,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
           <button class="mic" id="btnMic" aria-label="เริ่มอ่าน"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
           <div class="mic-label" id="micLabel">กดไมค์แล้วอ่านเลย<small>อ่านทีละคำ ช้า ๆ ชัด ๆ</small></div>
           <span class="spacer"></span>
+          <button class="btn" id="btnSkip" aria-label="ข้ามคำ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l8 7-8 7zM15 5v14"/></svg><span>ข้ามคำ</span></button>
           <button class="btn" id="btnListen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg><span>ฟังทั้งหน้า</span></button>
         </div>
 
@@ -435,6 +454,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
           <div class="spell" id="spellBox"></div>
           <div class="row actions" id="helpActions">
             <button class="btn" id="btnSpell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18l4-12 4 12M4.5 14h5M14 6h4a3 3 0 0 1 0 6h-4zm0 6h5a3 3 0 0 1 0 6h-5z"/></svg>ช่วยสะกดคำ</button>
+            <button class="btn ghost" id="btnHelpSkip">ข้ามคำนี้</button>
             <button class="btn primary" id="btnSay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg>ช่วยอ่าน</button>
           </div>
         </div>
@@ -446,6 +466,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
         </div>
 
         <div class="legend">
+          <span><i style="background:#e6ebf2"></i>ข้ามไป</span>
           <span><i style="background:var(--leaf-bg)"></i>อ่านถูก</span>
           <span><i style="background:var(--amber-bg)"></i>อ่านถูกเมื่อมีคนช่วย</span>
           <span><i style="background:var(--coral-bg)"></i>ลองอ่านอีกครั้ง</span>
@@ -462,6 +483,19 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
   </section>
 
   <!-- EDITOR -->
+  <section id="vRec" hidden>
+    <div class="rbar"><button class="btn ghost" id="btnRecBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>ชั้นหนังสือ</button><h2>เสียงครูสำหรับสะกดคำ</h2><span class="pager" id="recCount"></span></div>
+    <div class="panel rec-intro">
+      <p>เสียงอ่านในเครื่องมักออกเสียงพยางค์เดี่ยวอย่าง "ออ" "โอะ" ได้ไม่ตรง อัดเสียงครูไว้ครั้งเดียว พี่ฮูกจะใช้เสียงครูแทนทุกครั้งที่สะกดคำ กดปุ่มแดงแล้วพูด แล้วกดอีกครั้งเพื่อหยุด (หยุดเองใน 4 วินาที) เสียงจะถูกตัดช่วงเงียบหัวท้ายให้</p>
+      <div class="prow">
+        <label class="f" for="recBook" style="flex:1 1 240px">อัดคำในนิทานเรื่อง<select id="recBook"></select></label>
+      </div>
+      <div class="prow"><button class="btn" id="recExport">ส่งออกชุดเสียงครู</button><button class="btn" id="recImport">นำเข้าชุดเสียง</button><input type="file" id="recImportFile" accept=".json,application/json" hidden></div>
+      <p>เสียงครูจะแนบไปกับไฟล์นิทานตอนกด "ส่งออก" นักเรียนนำเข้าไฟล์แล้วได้ยินเสียงครูเลย</p>
+    </div>
+    <div id="recSections"></div>
+  </section>
+
   <section id="vEdit" hidden>
     <div class="rbar"><button class="btn ghost" id="btnEdBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>ยกเลิก</button><h2 id="edHeading">สร้างนิทานใหม่</h2></div>
     <div class="ed-head">
@@ -1038,8 +1072,18 @@ function playPcm(pcm) {
     } catch (e) { hqPlaying = false; res(); }
   });
 }
+async function recClip(text) {
+  const k = 'rec|' + text;
+  if (hqMem.has(k)) return hqMem.get(k);
+  const stored = await hqDB.get(k);
+  if (stored) { const pcm = new Int16Array(stored); hqMem.set(k, pcm); return pcm; }
+  return null;
+}
 async function speak(text, rate = 0.85) {
   const slow = rate <= 0.75, my = speakToken;
+  const mine = await recClip(text);
+  if (my !== speakToken) return;
+  if (mine) return playPcm(mine);
   const pcm = await hqClip(text, slow, hqConfigured());
   if (my !== speakToken) return;                   // stopped while the clip was loading
   if (pcm) return playPcm(pcm);
@@ -1361,7 +1405,7 @@ function loadPage(i) {
   renderText();
 }
 
-function starsFor(s) { if (!s.done) return 0; if (!s.helps && !s.wrongs) return 3; if (s.helps + s.wrongs <= 2) return 2; return 1; }
+function starsFor(s) { if (!s.done) return 0; const miss = s.helps + s.wrongs + (s.skips || 0) * 2; if (!miss) return 3; if (miss <= 2) return 2; return 1; }
 function showDoneBanner() {
   const s = cur.stats[cur.p], n = starsFor(s);
   $('#doneStars').textContent = '★'.repeat(n) + '☆'.repeat(3 - n);
@@ -1490,9 +1534,124 @@ async function readAlong() {
 }
 function stopReadAlong() { if (!cur.readingAlong && cur.readingIdx < 0) return; cur.readingAlong = false; cur.readingIdx = -1; $('#btnListen span').textContent = 'ฟังทั้งหน้า'; stopSpeech(); if (cur.book) renderText(); }
 
+/* ================= teacher voice recordings ================= */
+const UNIT_GROUPS = () => {
+  const cons = [...new Set(Object.values(CONS).map(v => v[1]))];
+  const vow = [...new Set(VTPL.map(v => v[2]))].filter(v => !cons.includes(v));   // ออ is already in the consonant list
+  return [
+    ['พยัญชนะ (ชื่อเสียงตอนสะกด)', cons],
+    ['สระ (เสียงสระตอนสะกด)', vow],
+    ['วรรณยุกต์และอื่น ๆ', ['ไม้เอก', 'ไม้โท', 'ไม้ตรี', 'ไม้จัตวา', 'การันต์', 'ไม้ยมก']]
+  ];
+};
+function bookSays(b) {
+  const map = parseSpellMap(b.spell), words = [], parts = [];
+  b.pages.forEach(pg => tokenize(pg.text).forEach(tk => {
+    if (!tk.readable) return;
+    words.push(tk.t.replace(/\//g, ''));
+    (spellParts(tk.t, map) || []).forEach(p => parts.push(p.say));
+  }));
+  const units = new Set(UNIT_GROUPS().flatMap(g => g[1]));
+  return { words: [...new Set(words)], parts: [...new Set(parts)].filter(x => !units.has(x) && !words.includes(x)) };
+}
+let recState = { rec: null, chunks: [], text: '', timer: null, stream: null };
+async function renderRecView() {
+  const sel = $('#recBook'), books = mergedBooks();
+  if (!sel.options.length || sel.options.length !== books.length) sel.innerHTML = books.map(b => `<option value="${esc(b.id)}">${esc(b.title)}</option>`).join('');
+  const b = findBook(sel.value) || books[0];
+  const groups = UNIT_GROUPS();
+  if (b) { const bs = bookSays(b); groups.push(['คำในนิทาน "' + b.title + '"', bs.words]); if (bs.parts.length) groups.push(['พยางค์และเสียงพิเศษในนิทานนี้', bs.parts]); }
+  const keys = new Set((await hqDB.keys() || []).filter(k => typeof k === 'string' && k.startsWith('rec|')).map(k => k.slice(4)));
+  let total = 0, done = 0;
+  $('#recSections').innerHTML = groups.map(([title, items]) => {
+    total += items.length; const d = items.filter(t => keys.has(t)).length; done += d;
+    return `<h3 class="shelf-title">${esc(title)} · อัดแล้ว ${d}/${items.length}</h3><div class="rec-grid">` + items.map(t =>
+      `<div class="rec-card${keys.has(t) ? ' has' : ''}" data-t="${esc(t)}"><b>${esc(t)}</b><div class="prow"><button class="btn rec-btn" data-rec="1" aria-label="อัดเสียง ${esc(t)}"><i class="dot"></i>อัด</button><button class="btn" data-play="1" aria-label="ฟัง ${esc(t)}">ฟัง</button></div></div>`).join('') + '</div>';
+  }).join('');
+  $('#recCount').textContent = `อัดแล้ว ${done}/${total}`;
+}
+function openRecView() { stopListening(); stopSpeech(); show('vRec'); renderRecView(); }
+async function pcmFromBlob(blob) {
+  actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+  const ab = await blob.arrayBuffer();
+  const dec = await actx.decodeAudioData(ab);
+  const len = Math.max(1, Math.round(dec.duration * HQ_RATE));
+  const off = new OfflineAudioContext(1, len, HQ_RATE);
+  const src = off.createBufferSource(); src.buffer = dec; src.connect(off.destination); src.start();
+  const out = (await off.startRendering()).getChannelData(0);
+  let peak = 0; for (let i = 0; i < out.length; i++) peak = Math.max(peak, Math.abs(out[i]));
+  const gain = peak > 0.01 ? 0.9 / peak : 1;
+  const pcm = new Int16Array(out.length);
+  for (let i = 0; i < out.length; i++) pcm[i] = Math.max(-32767, Math.min(32767, Math.round(out[i] * gain * 32767)));
+  // trim silence relative to this recording's own loudness
+  const th = 32767 * 0.9 * 0.06, pad = Math.round(HQ_RATE * 0.06);
+  let a = 0, z = pcm.length - 1;
+  while (a < z && Math.abs(pcm[a]) < th) a++;
+  while (z > a && Math.abs(pcm[z]) < th) z--;
+  return pcm.slice(Math.max(0, a - pad), Math.min(pcm.length, z + pad));
+}
+async function stopRecording() {
+  const r = recState.rec; if (!r) return;
+  clearTimeout(recState.timer);
+  if (r.state !== 'inactive') r.stop();
+}
+async function startRecording(text, card) {
+  if (recState.rec) { await stopRecording(); return; }
+  try {
+    recState.stream = recState.stream || await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true, channelCount: 1 } });
+  } catch (e) { toast('ยังไม่ได้อนุญาตให้ใช้ไมโครโฟน'); return; }
+  const r = new MediaRecorder(recState.stream);
+  recState = Object.assign(recState, { rec: r, chunks: [], text });
+  card.classList.add('recording'); card.querySelector('[data-rec]').lastChild.textContent = 'หยุด';
+  r.ondataavailable = e => e.data.size && recState.chunks.push(e.data);
+  r.onstop = async () => {
+    card.classList.remove('recording'); card.querySelector('[data-rec]').lastChild.textContent = 'อัด';
+    const blob = new Blob(recState.chunks, { type: r.mimeType || 'audio/webm' });
+    recState.rec = null;
+    try {
+      const pcm = await pcmFromBlob(blob);
+      if (pcm.length < HQ_RATE * 0.12) { toast('ไม่ได้ยินเสียง ลองพูดใกล้ไมค์อีกครั้ง'); return; }
+      hqMem.set('rec|' + text, pcm); await hqDB.put('rec|' + text, pcm.buffer.slice(0));
+      card.classList.add('has'); playPcm(pcm); renderRecCount();
+    } catch (e) { toast('บันทึกเสียงไม่สำเร็จ ลองใหม่อีกครั้ง'); }
+  };
+  r.start(); recState.timer = setTimeout(stopRecording, 4000);
+}
+async function renderRecCount() {
+  const cards = [...document.querySelectorAll('.rec-card')];
+  $('#recCount').textContent = `อัดแล้ว ${cards.filter(c => c.classList.contains('has')).length}/${cards.length}`;
+}
+$('#btnRecView').onclick = openRecView;
+$('#btnRecBack').onclick = () => { stopRecording(); if (recState.stream) { recState.stream.getTracks().forEach(t => t.stop()); recState.stream = null; } show('vLib'); renderShelf(); };
+$('#recBook').onchange = renderRecView;
+$('#recSections').addEventListener('click', async e => {
+  const card = e.target.closest('.rec-card'); if (!card) return;
+  const t = card.dataset.t;
+  if (e.target.closest('[data-rec]')) startRecording(t, card);
+  else if (e.target.closest('[data-play]')) { stopSpeech(); const own = await recClip(t); if (own) playPcm(own); else speak(t, 0.7); }
+});
+$('#recExport').onclick = async () => {
+  const keys = (await hqDB.keys() || []).filter(k => typeof k === 'string' && k.startsWith('rec|'));
+  if (!keys.length) { toast('ยังไม่มีเสียงที่อัดไว้'); return; }
+  const clips = {}; for (const k of keys) { const pcm = await recClip(k.slice(4)); if (pcm) clips[k] = int16ToB64(pcm); }
+  const blob = new Blob([JSON.stringify({ format: 'tsb-voicepack', version: 1, clips })], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ชุดเสียงครู.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('ส่งออกชุดเสียงครู ' + keys.length + ' เสียง');
+};
+$('#recImport').onclick = () => $('#recImportFile').click();
+$('#recImportFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text()); const clips = d.clips || d.audio || {};
+    let n = 0; for (const [k, v] of Object.entries(clips)) { if (!k.startsWith('rec|')) continue; const pcm = b64ToInt16(v); hqMem.set(k, pcm); await hqDB.put(k, pcm.buffer.slice(0)); n++; }
+    toast('นำเข้าเสียงครู ' + n + ' เสียง'); renderRecView();
+  } catch (err) { toast('ไฟล์นี้ไม่ใช่ชุดเสียงของนิทานพูดได้'); }
+};
+
 /* ================= views ================= */
 let books = [], teacher = lsGet('tsb-teacher', false);
-function show(v) { ['vLib', 'vRead', 'vEdit'].forEach(id => $('#' + id).hidden = id !== v); window.scrollTo(0, 0); }
+function show(v) { ['vLib', 'vRead', 'vEdit', 'vRec'].forEach(id => $('#' + id).hidden = id !== v); window.scrollTo(0, 0); }
 
 /* keep tablets/phones awake while a book is open */
 let wakeLock = null;
@@ -1507,7 +1666,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function openBook(book) {
   keepAwake(true);
   cur.book = book; cur.spellMap = parseSpellMap(book.spell);
-  cur.stats = book.pages.map(() => ({ done: false, helps: 0, wrongs: 0 }));
+  cur.stats = book.pages.map(() => ({ done: false, helps: 0, wrongs: 0, skips: 0 }));
   cur.score = 0; cur.streak = 0; cur.pops = [];
   $('#rScore').textContent = '★ 0'; $('#rStreak').textContent = '';
   $('#autoHelp').checked = autoHelp;
@@ -1551,10 +1710,12 @@ async function exportBook(b) {
   // attach the high-quality voice so students' devices can play it without a key
   const phrases = bookPhrases(b);
   const audio = {}; let have = 0;
-  if (hqConfigured() || (await hqDB.keys() || []).length) {
+  if (true) {
     for (let k = 0; k < phrases.length; k++) {
       const [t, slow] = phrases[k];
       if (hqConfigured() && k % 3 === 0) toast(`กำลังเตรียมเสียงพี่ฮูก ${k + 1}/${phrases.length}…`, 4000);
+      const own = await recClip(t);
+      if (own) { audio['rec|' + t] = int16ToB64(own); have++; continue; }
       const pcm = await hqClip(t, slow, hqConfigured());
       if (pcm) { audio[hqKey(t, slow)] = int16ToB64(pcm); have++; }
     }
@@ -1920,6 +2081,19 @@ $('#importFile').onchange = async e => {
 $('#btnBack').onclick = leaveReader;
 $('#btnMic').onclick = () => { listening ? stopListening() : startListening(); };
 $('#btnListen').onclick = readAlong;
+/* skip a word the microphone keeps missing; it is marked grey and earns no points */
+function skipWord(i) {
+  if (i < 0 || !cur.tokens[i] || !cur.tokens[i].readable || /^ok/.test(cur.status[i])) return;
+  stopSpeech(); cur.talking = false;
+  cur.status[i] = 'okSkip'; cur.stats[cur.p].skips = (cur.stats[cur.p].skips || 0) + 1;
+  cur.streak = 0; finalBuf = ''; committed = {}; lastProgress = Date.now();
+  closeHelp();
+  tutorSay('ข้ามคำว่า "' + cur.tokens[i].t.replace(/\//g, '') + '" ไปก่อนนะ อ่านคำต่อไปเลย');
+  renderText();
+  if (cursorIdx() < 0) pageComplete();
+}
+$('#btnSkip').onclick = () => skipWord(cursorIdx());
+$('#btnHelpSkip').onclick = () => skipWord(cur.helpIdx);
 $('#btnPrev').onclick = () => loadPage(cur.p - 1);
 $('#btnNext').onclick = () => loadPage(cur.p + 1);
 $('#btnDoneNext').onclick = () => { if (cur.p === cur.book.pages.length - 1) showSummary(); else loadPage(cur.p + 1); };
