@@ -415,7 +415,7 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
             <select id="engineSel"><option value="auto">เสียงคุณภาพสูง (Gemini) ถ้ามี API key ไม่มีก็ใช้เสียงในเครื่อง</option><option value="device">เสียงในเครื่องเท่านั้น</option></select></label>
           <div class="ocrst" id="hqStatus"></div>
           <label class="f" for="gemVoice">เสียงของ Gemini
-            <select id="gemVoice"><option value="Kore">Kore · ผู้หญิง ชัดเจน</option><option value="Leda">Leda · ผู้หญิง สดใส</option><option value="Aoede">Aoede · ผู้หญิง นุ่มนวล</option><option value="Puck">Puck · ผู้ชาย ร่าเริง</option><option value="Charon">Charon · ผู้ชาย สุภาพ</option></select></label>
+            <select id="gemVoice"><option value="Puck">Puck · ผู้ชาย ร่าเริง (พี่ฮูก แนะนำ)</option><option value="Achird">Achird · ผู้ชาย เป็นมิตร</option><option value="Iapetus">Iapetus · ผู้ชาย ชัดเจน</option><option value="Charon">Charon · ผู้ชาย สุภาพ</option><option value="Kore">Kore · ผู้หญิง ชัดเจน</option><option value="Leda">Leda · ผู้หญิง สดใส</option><option value="Aoede">Aoede · ผู้หญิง นุ่มนวล</option></select></label>
           <label class="f" for="ttsModel">โมเดลเสียง <small>เปลี่ยนได้ถ้า Google ออกรุ่นใหม่</small><input type="text" id="ttsModel" spellcheck="false"></label>
           <label class="f" for="voiceSel">เสียงในเครื่อง (สำรอง) <small>บนคอมพิวเตอร์ แนะนำเปิดด้วย Microsoft Edge จะมีเสียง Premwadee / Niwat ที่ชัดกว่า Chrome มาก</small><select id="voiceSel"></select></label>
           <label class="f" for="voiceRate">ความเร็วในการพูด <small>แนะนำ "ปกติ" ถ้าช้าเกินไปเสียงสระสั้นจะถูกลากยาวจนเพี้ยน · <span id="rateTxt"></span></small><input type="range" id="voiceRate" min="0.85" max="1.25" step="0.05"></label>
@@ -953,15 +953,20 @@ function confetti() {
 /* ================= text-to-speech ================= */
 const tts = window.speechSynthesis || null;
 let thVoice = null, thVoices = [];
-let voicePref = Object.assign({ name: '', rate: 1, engine: 'auto', gemVoice: 'Kore', ttsModel: 'gemini-2.5-flash-preview-tts' }, lsGet('tsb-voice', {}));
+let voicePref = Object.assign({ name: '', rate: 1, engine: 'auto', gemVoice: 'Puck', ttsModel: 'gemini-2.5-flash-preview-tts' }, lsGet('tsb-voice', {}));
+// พี่ฮูกเป็นพี่ชาย: ย้ายค่าเสียงผู้หญิงเดิมไปเป็นเสียงผู้ชายครั้งเดียว (ครูเปลี่ยนกลับได้ในตั้งค่า)
+if (!lsGet('tsb-voice-male', false)) { if (!voicePref.gemVoice || voicePref.gemVoice === 'Kore') voicePref.gemVoice = 'Puck'; if (/Premwadee|Kanya|Narisa|Achara|Google/i.test(voicePref.name || '')) voicePref.name = ''; lsSet('tsb-voice', voicePref); lsSet('tsb-voice-male', true); }
 // clearest Thai voices first: Microsoft natural voices (Edge), then Google, then anything Thai
 function voiceScore(v) {
   const n = v.name;
-  if (/Premwadee|Niwat|Achara/i.test(n) && /natural|online/i.test(n)) return 0;
-  if (/natural|online/i.test(n)) return 1;
-  if (/google/i.test(n)) return 2;
-  if (/Kanya|Narisa|Pattara/i.test(n)) return 3;
-  return 4;
+  // male voices first: พี่ฮูกคือพี่ชายที่สอนน้อง
+  if (/Niwat/i.test(n) && /natural|online/i.test(n)) return 0;
+  if (/Niwat|Pattara/i.test(n)) return 1;
+  if (/Premwadee|Achara/i.test(n) && /natural|online/i.test(n)) return 2;
+  if (/natural|online/i.test(n)) return 3;
+  if (/google/i.test(n)) return 4;
+  if (/Kanya|Narisa/i.test(n)) return 5;
+  return 6;
 }
 function pickVoice() {
   if (!tts) return;
@@ -1009,11 +1014,11 @@ const hqDB = (() => {
   const run = async (mode, fn) => { const db = await open(); if (!db) return null; return new Promise(res => { try { const t = db.transaction('clips', mode); const rq = fn(t.objectStore('clips')); t.oncomplete = () => res(rq && rq.result); t.onerror = () => res(null); } catch (e) { res(null); } }); };
   return { get: k => run('readonly', s => s.get(k)), put: (k, v) => run('readwrite', s => s.put(v, k)), clear: () => run('readwrite', s => s.clear()), keys: () => run('readonly', s => s.getAllKeys()) };
 })();
-const hqKey = (text, slow) => 'v2|' + (voicePref.gemVoice || 'Kore') + '|' + (slow ? 's' : 'n') + '|' + text;   // v2: natural pace (old slowed clips are not reused)
+const hqKey = (text, slow) => 'v2|' + (voicePref.gemVoice || 'Puck') + '|' + (slow ? 's' : 'n') + '|' + text;   // v2: natural pace (old slowed clips are not reused)
 const hqConfigured = () => voicePref.engine !== 'device' && !!ocrCfg().key.trim();
 function hqPrompt(text, slow) {
   // never ask for slow speech: stretching turns short vowels (อะ โอะ เอะ) into long ones and bends the tones
-  return 'Say this Thai text clearly at a normal speaking pace, like a Thai teacher helping a child spell. Do not stretch the sound: short vowels (อะ อิ อึ อุ เอะ แอะ โอะ เอาะ เออะ) stay short and crisp, long vowels stay long, and the tone must be exact. Say only the text: ' + text;
+  return 'You are พี่ฮูก, a warm, cheerful young Thai man teaching his little brother or sister to read. Say this Thai text clearly at a normal speaking pace, with a friendly big-brother tone. Do not stretch the sound: short vowels (อะ อิ อึ อุ เอะ แอะ โอะ เอาะ เออะ) stay short and crisp, long vowels stay long, and the tone must be exact. Say only the text: ' + text;
 }
 function b64ToInt16(b64) { const bin = atob(b64), n = bin.length >> 1, out = new Int16Array(n); for (let i = 0; i < n; i++) out[i] = (bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8)) << 16 >> 16; return out; }
 function int16ToB64(a) { const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
@@ -1030,7 +1035,7 @@ async function hqFetch(text, slow) {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.key.trim() },
     body: JSON.stringify({ contents: [{ parts: [{ text: hqPrompt(text, slow) }] }],
-      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voicePref.gemVoice || 'Kore' } } } } })
+      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voicePref.gemVoice || 'Puck' } } } } })
   });
   if (!r.ok) { const e = new Error(r.status === 429 ? 'quota' : r.status === 400 || r.status === 403 ? 'key' : r.status === 404 ? 'model' : 'net'); throw e; }
   const j = await r.json();
@@ -2007,7 +2012,7 @@ function rotateDataUrl(url) {
 }
 
 /* ================= tutor, score ================= */
-const OWL = '<polygon points="18,22 22,4 34,16" fill="#8c6bd6" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><polygon points="62,22 58,4 46,16" fill="#8c6bd6" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><path d="M14 52q-8 10 3 19M66 52q8 10-3 19" fill="#7a59c4" stroke="#2b2350" stroke-width="3" stroke-linecap="round"/><ellipse cx="40" cy="46" rx="27" ry="29" fill="#8c6bd6" stroke="#2b2350" stroke-width="3"/><ellipse cx="40" cy="57" rx="15" ry="15" fill="#e3d8fb"/><circle cx="29" cy="34" r="11" fill="#fff" stroke="#2b2350" stroke-width="3"/><circle cx="51" cy="34" r="11" fill="#fff" stroke="#2b2350" stroke-width="3"/><circle cx="31" cy="35" r="5" fill="#2b2350"/><circle cx="49" cy="35" r="5" fill="#2b2350"/><circle cx="32.5" cy="33" r="1.7" fill="#fff"/><circle cx="50.5" cy="33" r="1.7" fill="#fff"/><path d="M36 43l4 7 4-7z" fill="#ffb627" stroke="#2b2350" stroke-width="2.5" stroke-linejoin="round"/><path d="M33 77v-4M47 77v-4" stroke="#ffb627" stroke-width="4" stroke-linecap="round"/>';
+const OWL = '<polygon points="18,22 22,4 34,16" fill="#8c6bd6" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><polygon points="62,22 58,4 46,16" fill="#8c6bd6" stroke="#2b2350" stroke-width="3" stroke-linejoin="round"/><g class="owl-wing owl-wing-l"><path d="M14 52q-8 10 3 19" fill="#7a59c4" stroke="#2b2350" stroke-width="3" stroke-linecap="round"/></g><g class="owl-wing owl-wing-r"><path d="M66 52q8 10-3 19" fill="#7a59c4" stroke="#2b2350" stroke-width="3" stroke-linecap="round"/></g><ellipse cx="40" cy="46" rx="27" ry="29" fill="#8c6bd6" stroke="#2b2350" stroke-width="3"/><ellipse cx="40" cy="57" rx="15" ry="15" fill="#e3d8fb"/><circle cx="29" cy="34" r="11" fill="#fff" stroke="#2b2350" stroke-width="3"/><circle cx="51" cy="34" r="11" fill="#fff" stroke="#2b2350" stroke-width="3"/><g class="owl-pupils"><circle cx="31" cy="35" r="5" fill="#2b2350"/><circle cx="49" cy="35" r="5" fill="#2b2350"/><circle cx="32.5" cy="33" r="1.7" fill="#fff"/><circle cx="50.5" cy="33" r="1.7" fill="#fff"/></g><ellipse class="owl-mouth" cx="40" cy="48.6" rx="2.6" ry="2" fill="#5b1d3a"/><path class="owl-jaw" d="M37.2 47.2h5.6l-2.8 3.6z" fill="#f29a12" stroke="#2b2350" stroke-width="2" stroke-linejoin="round"/><path class="owl-beak" d="M35.6 43h8.8l-4.4 5.6z" fill="#ffb627" stroke="#2b2350" stroke-width="2.5" stroke-linejoin="round"/><path d="M33 77v-4M47 77v-4" stroke="#ffb627" stroke-width="4" stroke-linecap="round"/>';
 document.querySelectorAll('[data-owl]').forEach(s => s.innerHTML = OWL);
 const PRAISE = ['ถูกต้อง!', 'เก่งมาก!', 'เยี่ยมเลย!', 'อ่านชัดมาก!', 'สุดยอด!', 'ใช่แล้ว!'];
 function tutorSay(msg, mood) {
@@ -2249,5 +2254,6 @@ window.addEventListener('load', async function boot() {
 <script src="js/practice.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/teacher.js"></script>
+<script src="js/fx.js"></script>
 </body>
 </html>
