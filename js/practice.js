@@ -79,7 +79,7 @@ addStyle(`
 .blank{display:inline-block;min-width:3.2em;border-bottom:4px dashed var(--sun-deep);margin:0 .2em;vertical-align:baseline}
 `);
 const kidName = () => (ME ? meName() : '');
-async function owlSay(lines) { for (const l of lines) { await speak(l, 1); await sleep(200); } }
+async function owlSay(lines, bubble) { const my = speakToken; for (const l of lines) { if (my !== speakToken) return; await owlLine(l, bubble); await sleep(200); } }
 function rtCheer(part, title, text, nextLabel, next) {
   stopListening(); stopSpeech();
   $('#chStars').innerHTML = [0, 1, 2].map(k => `<i style="animation-delay:${k * 0.15}s">★</i>`).join('');
@@ -101,6 +101,77 @@ function rtFinale() {
   setTimeout(() => owlSay(['เย้! ยินดีด้วยนะ' + (n ? ' ' + n : ''), 'ทำแบบทดสอบการอ่านครบทั้ง 3 ตอนแล้ว', 'เก่งมากเลย ทุกคนปรบมือให้' + (n ? ' ' + n : 'หนู') + ' ดัง ๆ เลย!']).then(() => applause(3)), 2400);
 }
 
+/* ---------- RT intro: พี่ฮูกยืนข้างการ์ด อธิบายทีละตอน ---------- */
+addOverlay('rtIntro', `<div class="big-modal"><div class="card rti-card">
+  <div class="rti-owl"><svg class="owl" data-owl viewBox="0 0 80 80" aria-hidden="true"></svg></div>
+  <div class="rti-main">
+    <div class="rti-bubble" id="rtiBubble" aria-live="polite"></div>
+    <h3 class="rti-title">แบบทดสอบการอ่าน</h3>
+    <div class="rti-parts" id="rtiParts"></div>
+    <div class="rti-btns"><button class="btn" id="rtiCancel">ยกเลิก</button><button class="btn" id="rtiAgain">🔁 ฟังพี่ฮูกอีกครั้ง</button><button class="btn primary" id="rtiGo">เริ่มทดสอบ ▶</button></div>
+  </div></div></div>`);
+addStyle(`
+#rtIntro .rti-card{max-width:760px;text-align:left;display:grid;grid-template-columns:150px 1fr;gap:6px 18px;align-items:start;position:relative;overflow:visible}
+.rti-owl{position:sticky;top:0;display:flex;justify-content:center;padding-top:18px}
+.rti-owl svg{width:150px;height:170px;filter:drop-shadow(0 10px 18px rgba(43,35,80,.25));animation:rtiFloat 3s ease-in-out infinite}
+@keyframes rtiFloat{50%{transform:translateY(-6px)}}
+.rti-bubble{position:relative;background:#fff;border:3px solid var(--ink,#2b2350);border-radius:20px;padding:12px 16px;min-height:3.6em;font-size:clamp(17px,2.6vw,21px);line-height:1.55;color:var(--ink,#2b2350);box-shadow:0 6px 0 rgba(43,35,80,.12)}
+.rti-bubble::before{content:"";position:absolute;left:-15px;top:22px;border:12px solid transparent;border-right-color:var(--ink,#2b2350);border-left:0}
+.rti-bubble::after{content:"";position:absolute;left:-10px;top:24px;border:10px solid transparent;border-right-color:#fff;border-left:0}
+.rti-bubble .cur{display:inline-block;width:.5em;height:1em;vertical-align:-.12em;background:currentColor;opacity:.5;margin-left:2px;animation:capBlink .7s steps(2) infinite}
+.rti-title{margin:14px 0 8px;font-size:clamp(20px,3vw,26px)}
+.rti-parts{display:grid;gap:8px}
+.rti-part{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-radius:16px;background:#f4f0ff;border:2px solid transparent;transition:transform .35s,background .35s,border-color .35s,box-shadow .35s}
+.rti-part .no{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#8c6bd6;color:#fff;font-weight:800}
+.rti-part b{font-size:15px;color:#6b5aa6;white-space:nowrap}
+.rti-part.on{background:#fff7dc;border-color:#ffb627;transform:scale(1.03);box-shadow:0 8px 18px rgba(255,182,39,.28)}
+.rti-part.on .no{background:#ffb627;color:#2b2350;animation:micBob 1s ease-in-out infinite}
+.rti-part.done .no::after{content:"✓"}.rti-part.done .no span{display:none}
+.rti-btns{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:14px}
+#rtiGo.ready{animation:rtiGo 1.1s ease-in-out infinite;box-shadow:0 0 0 0 rgba(24,195,165,.6)}
+@keyframes rtiGo{50%{transform:scale(1.07);box-shadow:0 0 0 12px rgba(24,195,165,0)}}
+@media (max-width:640px){#rtIntro .rti-card{display:block;padding:18px}.rti-owl{float:left;position:static;width:88px;padding-top:4px}.rti-owl svg{width:88px;height:100px}.rti-bubble{margin-left:100px;font-size:16px}.rti-title{clear:both;padding-top:6px}.rti-part{padding:9px 12px}.rti-btns{justify-content:stretch}.rti-btns .btn{flex:1 1 auto}}
+`);
+function openRTIntro({ words, quiz, onStart, onCancel }) {
+  const n = kidName();
+  const parts = [
+    ['ตอนที่ 1 อ่านออกเสียง', words + ' ข้อ'],
+    ['ตอนที่ 2 อ่านข้อความ', '1 เรื่อง'],
+    ['ตอนที่ 3 จงเติมคำให้สมบูรณ์มีความหมาย', (quiz || 0) + ' ข้อ']
+  ];
+  const script = [
+    [-1, 'สวัสดีจ้ะ' + (n ? ' ' + n : '') + ' วันนี้พี่ฮูกจะพาทำแบบทดสอบการอ่าน มีทั้งหมด 3 ตอนนะ'],
+    [0, 'ตอนที่ 1 อ่านออกเสียง จะมีให้อ่านทีละคำ อ่านให้ชัด ๆ ถ้าคำไหนอ่านไม่ได้ กดข้ามคำได้เลยจ้ะ'],
+    [1, 'ตอนที่ 2 อ่านข้อความ ค่อย ๆ อ่านไปทีละคำจนจบเรื่อง ไม่ต้องรีบนะ'],
+    [2, 'ตอนที่ 3 จงเติมคำให้สมบูรณ์มีความหมาย อ่านประโยค แล้วเลือกคำที่ถูกต้องมาเติมในช่องว่าง'],
+    [3, 'ระหว่างทดสอบ พี่ฮูกจะไม่ช่วยสะกดนะ ตั้งใจเต็มที่ พี่ฮูกเป็นกำลังใจให้'],
+    [4, 'เมื่อพร้อมแล้ว กดเริ่มทดสอบ แล้วไปกันเลย!']
+  ];
+  if (!quiz) { parts.pop(); script.splice(3, 1); }
+  $('#rtiParts').innerHTML = parts.map((p, i) => `<div class="rti-part" data-pt="${i}"><span class="no"><span>${i + 1}</span></span><span>${esc(p[0])}</span><b>${esc(p[1])}</b></div>`).join('');
+  const go = $('#rtiGo'), bubble = $('#rtiBubble');
+  const mark = k => document.querySelectorAll('#rtiParts .rti-part').forEach((el, i) => { el.classList.toggle('on', i === k); if (k >= 0 && i < k || k >= 3) el.classList.add('done'); });
+  let run = 0;
+  const explain = async () => {
+    const me = ++run; stopSpeech(); go.classList.remove('ready');
+    document.querySelectorAll('#rtiParts .rti-part').forEach(el => el.classList.remove('on', 'done'));
+    for (const [k, line] of script) {
+      if (me !== run || $('#rtIntro').hidden) return;
+      mark(k); if (k === 4) go.classList.add('ready');
+      await owlSay([line], bubble);
+      await sleep(250);
+    }
+    if (me === run) { mark(-1); go.classList.add('ready'); }
+  };
+  const close = () => { run++; stopSpeech(); $('#rtIntro').hidden = true; };
+  $('#rtiCancel').onclick = () => { close(); onCancel(); };
+  $('#rtiAgain').onclick = explain;
+  go.onclick = () => { close(); onStart(); };
+  bubble.textContent = '';
+  $('#rtIntro').hidden = false; renderOwls();
+  setTimeout(explain, 350);
+}
+
 /* ---------- 2) RT-style test: words · timed passage · comprehension ---------- */
 window.startRT = function (book) {
   if (!book) return;
@@ -108,12 +179,8 @@ window.startRT = function (book) {
   const words = pool.sort(() => Math.random() - 0.5).slice(0, Math.min(20, pool.length));
   const passagePage = book.pages.slice().sort((a, b) => tokenize(b.text).filter(t => t.readable).length - tokenize(a.text).filter(t => t.readable).length)[0];
   const R = { book, words: { total: words.length, ok: 0, missed: [] }, passage: { words: 0, ok: 0, seconds: 0, wcpm: 0 }, quiz: { total: 0, ok: 0 }, t0: 0 };
-  const intro = () => showResult('แบบทดสอบการอ่าน (แบบ RT)', `<div class="rt-parts">
-      <div class="rt-part"><span>ตอนที่ 1 อ่านออกเสียงคำ</span><b>${words.length} คำ</b></div>
-      <div class="rt-part"><span>ตอนที่ 2 อ่านข้อความ (จับเวลา)</span><b>1 ข้อความ</b></div>
-      <div class="rt-part"><span>ตอนที่ 3 จงเติมคำให้สมบูรณ์มีความหมาย</span><b>เลือกคำตอบ</b></div></div>
-      <p class="login-sub">ระหว่างทดสอบพี่ฮูกจะไม่ช่วยสะกด ถ้าอ่านคำไหนไม่ได้กด "ข้ามคำ"</p>`,
-    [['ยกเลิก', () => openBook(book)], ['เริ่มทดสอบ', part1, true]]);
+  const nQuiz = Math.min(5, (book.questions && book.questions.length ? book.questions : autoQuestions(book)).length);
+  const intro = () => openRTIntro({ words: words.length, quiz: nQuiz, onStart: part1, onCancel: () => openBook(book) });
   function part1() {
     const pseudo = { id: '__rt', title: book.title, spell: book.spell, pages: words.map(w => ({ img: '', text: w })) };
     R.t0 = Date.now();
@@ -122,13 +189,13 @@ window.startRT = function (book) {
       onPage() {
         const ok = statusOfWord() === 'ok'; if (ok) R.words.ok++; else R.words.missed.push(words[cur.p]);
         $('#doneBanner').hidden = true;
-        setTimeout(() => { if (cur.p < words.length - 1) loadPage(cur.p + 1); else rtCheer(1, 'ผ่านตอนที่ 1 แล้ว!', 'อ่านออกเสียงคำได้ ' + R.words.ok + ' จาก ' + R.words.total + ' คำ', 'ไปตอนที่ 2', part2); }, 450);
+        setTimeout(() => { if (cur.p < words.length - 1) loadPage(cur.p + 1); else rtCheer(1, 'ผ่านตอนที่ 1 แล้ว!', 'อ่านออกเสียงได้ ' + R.words.ok + ' จาก ' + R.words.total + ' คำ', 'ไปตอนที่ 2', part2); }, 450);
       },
       onExit() { openBook(book); }
     };
     openReader(pseudo, 0, 'rt-words');
-    $('#rTitle').textContent = 'ทดสอบ ตอนที่ 1: อ่านออกเสียงคำ';
-    tutorSay('ตอนที่ 1 อ่านคำที่เห็นทีละคำ อ่านไม่ได้กดข้ามคำนะ');
+    $('#rTitle').textContent = 'ทดสอบ ตอนที่ 1: อ่านออกเสียง';
+    tutorSay('ตอนที่ 1 อ่านออกเสียงทีละคำ อ่านไม่ได้กดข้ามคำได้นะ');
   }
   function part2() {
     const pseudo = { id: '__rt2', title: book.title, spell: book.spell, pages: [{ img: passagePage.img, text: passagePage.text }] };
@@ -145,8 +212,8 @@ window.startRT = function (book) {
       onExit() { openBook(book); }
     };
     openReader(pseudo, 0, 'rt-passage');
-    $('#rTitle').textContent = 'ทดสอบ ตอนที่ 2: อ่านข้อความ (จับเวลา)';
-    tutorSay('ตอนที่ 2 กดไมค์แล้วอ่านข้อความนี้ให้จบ พี่ฮูกจะจับเวลานะ');
+    $('#rTitle').textContent = 'ทดสอบ ตอนที่ 2: อ่านข้อความ';
+    tutorSay('ตอนที่ 2 กดไมค์ แล้วค่อย ๆ อ่านข้อความนี้ให้จบนะ ไม่ต้องรีบ');
   }
   function part3() {
     const qs = (book.questions && book.questions.length ? book.questions : autoQuestions(book)).slice(0, 5);
@@ -175,7 +242,7 @@ window.startRT = function (book) {
               detail: { wordsOk: R.words.ok, wordsTotal: R.words.total, passageOk: R.passage.ok, passageWords: R.passage.words, wcpm: R.passage.wcpm, quizOk: R.quiz.ok, quizTotal: R.quiz.total } });
     if (R.words.missed.length) noteHardWords(R.words.missed);
     showResult('ผลการทดสอบ', `<div class="rt-parts">
-      <div class="rt-part"><span>อ่านออกเสียงคำ</span><b>${R.words.ok}/${R.words.total} (${pct(R.words.ok, R.words.total)}%)</b></div>
+      <div class="rt-part"><span>อ่านออกเสียง</span><b>${R.words.ok}/${R.words.total} (${pct(R.words.ok, R.words.total)}%)</b></div>
       <div class="rt-part"><span>อ่านข้อความถูก</span><b>${R.passage.ok}/${R.passage.words} คำ</b></div>
       <div class="rt-part"><span>ความเร็วในการอ่าน</span><b>${R.passage.wcpm} คำ/นาที</b></div>
       <div class="rt-part"><span>อ่านรู้เรื่อง</span><b>${R.quiz.ok}/${R.quiz.total}</b></div></div>`,
