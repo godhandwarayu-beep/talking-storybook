@@ -193,37 +193,99 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 
-/* ---------- teacher mode is locked with the teacher PIN, so children cannot unlock every stage ---------- */
+/* ---------- teacher area is locked with the teacher code ----------
+   Everyone with the link can read the stories. Making stories from photos, importing files, editing,
+   recording, AI, the library tools and the results page all need the teacher code. */
 addOverlay('pinGate', `<div class="big-modal"><div class="card">
-  <h3>โหมดครู</h3><p class="login-sub" id="pgText">ใส่รหัสครู</p>
-  <input type="password" id="pgPin" inputmode="numeric" autocomplete="off" style="font-size:24px;text-align:center;max-width:240px;justify-self:center">
+  <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="justify-self:center;color:var(--teal)"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+  <h3>สำหรับครู</h3><p class="login-sub" id="pgText">ใส่รหัสครูเพื่อสร้างนิทานจากภาพ นำเข้าไฟล์ และใช้ระบบของครู</p>
+  <input type="password" id="pgPin" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-size:24px;text-align:center;max-width:260px;justify-self:center;letter-spacing:2px">
+  <label class="autohelp" for="pgRemember" style="justify-content:center"><input type="checkbox" id="pgRemember">จำเครื่องนี้ไว้ (ใช้เฉพาะเครื่องของครู)</label>
   <p class="ocrst err" id="pgErr"></p>
-  <div class="prow" style="justify-content:center"><button class="btn ghost" id="pgCancel">ยกเลิก</button><button class="btn primary" id="pgOk">เข้าโหมดครู</button></div>
+  <div class="prow" style="justify-content:center"><button class="btn ghost" id="pgCancel">ยกเลิก</button><button class="btn primary" id="pgOk">เข้าสู่ระบบครู</button></div>
 </div></div>`);
+const CODE_SALT = 'tsb-teacher-v1|';
+const codeHash = () => String((window.TSB_CONFIG && TSB_CONFIG.TEACHER_CODE_SHA256) || '').toLowerCase();
+async function sha256(t) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+// unlocked = remembered on this device for the current code, or unlocked during this browser session
+function teacherUnlocked() {
+  let ses = false; try { ses = sessionStorage.getItem('tsb-tunlock') === codeHash(); } catch (e) {}
+  return ses || (!!codeHash() && lsGet('tsb-tunlock', '') === codeHash());
+}
+// anyone who switched teacher mode on before the lock existed is switched back off
+if (teacher && !teacherUnlocked()) { teacher = false; lsSet('tsb-teacher', false); }
+let afterUnlock = null;
+function askTeacherCode(then) {
+  afterUnlock = then || null;
+  $('#pgPin').value = ''; $('#pgErr').textContent = ''; $('#pgRemember').checked = false;
+  $('#pinGate').hidden = false; setTimeout(() => $('#pgPin').focus(), 50);
+}
+window.requireTeacher = function (then) {          // run `then` only for a teacher
+  if (teacher && teacherUnlocked()) { then && then(); return true; }
+  askTeacherCode(() => { enterTeacher(); then && then(); });
+  return false;
+};
+function enterTeacher() {
+  teacher = true; $('#teacherToggle').checked = true; lsSet('tsb-teacher', true);
+  if (!$('#vLogin').hidden) show('vLib');
+  renderShelf();
+}
 (function teacherGate() {
   const tg = $('#teacherToggle');
-  const enter = () => { teacher = true; tg.checked = true; lsSet('tsb-teacher', true); renderShelf(); if (!$('#vLogin').hidden) { show('vLib'); renderShelf(); } };
   tg.addEventListener('change', e => {
-    if (!tg.checked) return;                      // turning off is always allowed
-    const localPin = lsGet('tsb-tpin', '');
-    if (!localPin && !hasServer()) return;       // personal device with nothing set up: no lock
+    if (!tg.checked) {                             // switching off also locks this session again
+      try { sessionStorage.removeItem('tsb-tunlock'); } catch (err) {}
+      return;
+    }
+    if (teacherUnlocked()) return;
     e.stopImmediatePropagation();
     tg.checked = false; teacher = false; lsSet('tsb-teacher', false);
-    $('#pgPin').value = ''; $('#pgErr').textContent = ''; $('#pinGate').hidden = false; setTimeout(() => $('#pgPin').focus(), 50);
+    askTeacherCode(enterTeacher);
   }, true);
   const check = async () => {
-    const pin = $('#pgPin').value.trim(); if (!pin) return;
-    const localPin = lsGet('tsb-tpin', '');
-    if (localPin && pin === localPin) { $('#pinGate').hidden = true; enter(); return; }
-    if (hasServer()) {
+    const pin = $('#pgPin').value.trim().toUpperCase(); if (!pin) return;
+    let ok = false;
+    try { ok = !!codeHash() && (await sha256(CODE_SALT + pin)) === codeHash(); } catch (e) {}
+    if (!ok && hasServer()) {
       $('#pgErr').textContent = 'กำลังตรวจ…';
-      try { await api('teacher_check', { pin }); lsSet('tsb-tpin', pin); $('#pinGate').hidden = true; enter(); return; }
-      catch (err) { $('#pgErr').textContent = err.message === 'unknown_action' ? 'อัปเดต Code.gs เป็นเวอร์ชันล่าสุดก่อนนะ' : apiErr(err); return; }
+      try { await api('teacher_check', { pin: $('#pgPin').value.trim() }); ok = true; lsSet('tsb-tpin', $('#pgPin').value.trim()); } catch (err) {}
     }
-    $('#pgErr').textContent = 'รหัสครูไม่ถูกต้อง';
+    if (!ok) { $('#pgErr').textContent = 'รหัสครูไม่ถูกต้อง'; sndOops(); return; }
+    try { sessionStorage.setItem('tsb-tunlock', codeHash()); } catch (e) {}
+    if ($('#pgRemember').checked) lsSet('tsb-tunlock', codeHash());
+    $('#pinGate').hidden = true;
+    const f = afterUnlock; afterUnlock = null; f && f();
   };
   $('#pgOk').onclick = check;
   $('#pgPin').onkeydown = e => { if (e.key === 'Enter') check(); };
-  $('#pgCancel').onclick = () => { $('#pinGate').hidden = true; };
+  $('#pgCancel').onclick = () => { afterUnlock = null; $('#pinGate').hidden = true; };
+})();
+
+/* ---------- hide the photo-to-story tools from people without the code ---------- */
+(function lockTeacherTools() {
+  const tools = $('#btnCam').parentElement;
+  const heroTitle = document.querySelector('.hero h2'), heroText = document.querySelector('.hero p');
+  const studentHero = { h: 'เลือกนิทานแล้วฝึกอ่านกับพี่ฮูก', p: 'แตะนิทานที่อยากอ่าน อ่านออกเสียงให้พี่ฮูกฟัง อ่านจบแต่ละด่านจะได้ดาว' };
+  const teacherHero = { h: heroTitle.textContent, p: heroText.textContent };
+  const paint = () => {
+    const t = teacher && teacherUnlocked();
+    tools.hidden = !t;
+    heroTitle.textContent = t ? teacherHero.h : studentHero.h;
+    heroText.textContent = t ? teacherHero.p : studentHero.p;
+  };
+  document.addEventListener('tsb:shelf', paint);
+  paint();
+  // every teacher entry point checks again, even if a button is made visible by hand
+  const guard = (fn) => function (...a) { if (!(teacher && teacherUnlocked())) { requireTeacher(); return; } return fn.apply(this, a); };
+  newFromPhotos = guard(newFromPhotos);
+  openEditor = guard(openEditor);
+  ['btnCam', 'btnPick', 'btnNew', 'btnImport', 'btnRecView', 'btnAI', 'btnDash'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    el.addEventListener('click', e => { if (!(teacher && teacherUnlocked())) { e.stopImmediatePropagation(); e.preventDefault(); requireTeacher(); } }, true);
+  });
+  ['camIn', 'pickIn', 'importFile'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    el.addEventListener('change', e => { if (!(teacher && teacherUnlocked())) { e.stopImmediatePropagation(); el.value = ''; requireTeacher(); } }, true);
+  });
 })();
 addStyle(`@media (max-width:560px){.switch{font-size:0;gap:0;padding:6px}.switch input{margin:0}.top{flex-wrap:nowrap}.me-chip{max-width:44vw}}`);
