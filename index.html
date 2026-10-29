@@ -350,6 +350,16 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
 .rec-card.recording .dot{animation:blink .8s infinite}
 @keyframes blink{50%{opacity:.2}}
 
+/* mic waiting to be pressed: bobs, glows and sends out rings so children see where to tap */
+.mic:not(.live){animation:micBob 1.6s ease-in-out infinite}
+.mic:not(.live)::before,.mic:not(.live)::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:3px solid rgba(24,195,165,.7);animation:micCall 1.6s ease-out infinite;pointer-events:none}
+.mic:not(.live)::after{animation-delay:.8s}
+@keyframes micBob{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-5px) scale(1.06);box-shadow:0 16px 30px -8px rgba(15,155,142,.85),0 0 0 6px rgba(24,195,165,.18)}}
+@keyframes micCall{from{transform:scale(1);opacity:.9}to{transform:scale(1.65);opacity:0}}
+.mic:not(.live) + .mic-label{color:var(--teal)}
+.mic:not(.live) + .mic-label::before{content:"👈 ";display:inline-block;animation:nudge 1s ease-in-out infinite}
+@keyframes nudge{50%{transform:translateX(-6px)}}
+
 /* confetti */
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:40;overflow:hidden}
 .confetti i{position:absolute;top:-20px;width:10px;height:16px;border-radius:3px;animation:fall 1.8s ease-in forwards}
