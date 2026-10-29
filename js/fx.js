@@ -159,13 +159,35 @@ const estSeconds = (text, rate) => Math.max(0.8, seg(text).length / (13 * (rate 
 const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
 const player = new Audio(); player.preload = 'auto'; player.setAttribute('playsinline', ''); player.setAttribute('webkit-playsinline', '');
 let playerOk = false, playerUrl = '', playerFin = null;
-function unlockAudio() {
+/* iPhone/iPad (Safari): speech and sound unlock only inside a real tap (touchend/click, not touchstart/pointerdown),
+   and the side switch on silent mutes web audio unless the page says it is playing media. */
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+let ttsUnlocked = false;
+function setSession(type) { try { if (navigator.audioSession && navigator.audioSession.type !== type) navigator.audioSession.type = type; } catch (e) {} }
+setSession('playback');
+function unlockAudio(e) {
   const c = ctx();
   if (c && c.state !== 'running') c.resume().catch(() => {});
-  if (!playerOk) { player.src = SILENT_WAV; const p = player.play(); if (p && p.then) p.then(() => { playerOk = true; }).catch(() => {}); }
-  if (tts) { try { if (tts.paused) tts.resume(); } catch (e) {} if (!thVoices.length) pickVoice(); }
+  if (!playerOk && !hqPlaying) { player.src = SILENT_WAV; const p = player.play(); if (p && p.then) p.then(() => { playerOk = true; }).catch(() => {}); }
+  if (tts) {
+    try { if (tts.paused) tts.resume(); } catch (er) {}
+    if (!thVoices.length) pickVoice();
+    // Safari lets a page speak only after it has spoken once inside a tap
+    if (!ttsUnlocked && e && (e.type === 'click' || e.type === 'touchend') && !tts.speaking && !tts.pending) {
+      try { const u = new SpeechSynthesisUtterance(' '); u.lang = 'th-TH'; if (thVoice) u.voice = thVoice; u.volume = 0.01; tts.speak(u); ttsUnlocked = true; } catch (er) {}
+    }
+  }
 }
-['pointerdown', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
+['pointerdown', 'touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
+// the microphone needs the record-and-play mode; go back to plain playback when it is off
+const _openMicIos = openMic;
+openMic = function () { setSession('play-and-record'); return _openMicIos.apply(this, arguments); };
+const _startListeningIos = startListening;
+startListening = function () { setSession('play-and-record'); return _startListeningIos.apply(this, arguments); };
+setInterval(() => {
+  const micOn = (typeof listening !== 'undefined' && listening) || (typeof recState !== 'undefined' && recState.rec) || ['voiceModal', 'recMe'].some(visible);
+  if (!micOn) setSession('playback');
+}, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden && actx && actx.state !== 'running') actx.resume().catch(() => {}); });
 
 function pcmToWavUrl(pcm) {
@@ -227,7 +249,7 @@ speakDevice = async function (text, rate) {
     u.onend = () => fin('end'); u.onerror = e => fin(e && e.error === 'interrupted' ? 'end' : 'error');
     // Chrome stops long speech after about 15 s unless it is nudged
     const keep = setInterval(() => { try { if (tts.speaking && !tts.paused) tts.resume(); } catch (e) {} }, 5000);
-    setTimeout(() => { if (!started) fin('nostart'); }, 2200);
+    setTimeout(() => { if (!started) fin('nostart'); }, IOS ? 3500 : 2200);
     setTimeout(() => fin('end'), 2500 + text.length * 420);
     tts.speak(u);
   });
