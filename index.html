@@ -2,6 +2,26 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
+<script>
+/* เปิดลิงก์แล้วได้เวอร์ชันล่าสุดทันที: ถ้าบนเว็บมีเวอร์ชันใหม่กว่า ล้างไฟล์แอปที่เครื่องเก็บไว้ แล้วโหลดใหม่ครั้งเดียว
+   (ไม่ลบข้อมูลนักเรียน นิทาน หรือเสียงที่อัดไว้) */
+window.TSB_VERSION = '20261029-1400';
+(function () {
+  if (location.protocol !== 'https:' || !window.fetch) return;
+  fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    if (!j || !j.v || j.v === window.TSB_VERSION) return;
+    var tried = ''; try { tried = sessionStorage.getItem('tsb-upd') || ''; } catch (e) {}
+    if (tried === j.v) return;                       // already tried once for this version: do not loop
+    try { sessionStorage.setItem('tsb-upd', j.v); } catch (e) {}
+    var clear = window.caches ? caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }) : Promise.resolve();
+    var unreg = navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }) : Promise.resolve();
+    Promise.all([clear, unreg]).catch(function () {}).then(function () {
+      var q = new URLSearchParams(location.search); q.set('v', j.v);
+      location.replace(location.pathname + '?' + q.toString() + location.hash);
+    });
+  }).catch(function () {});
+})();
+</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>นิทานพูดได้</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -2258,13 +2278,13 @@ window.addEventListener('load', async function boot() {
   }
 });
 </script>
-<script src="config.js"></script>
-<script src="js/core-ext.js"></script>
-<script src="js/student.js"></script>
-<script src="js/stages.js"></script>
-<script src="js/practice.js"></script>
-<script src="js/ai.js"></script>
-<script src="js/teacher.js"></script>
-<script src="js/fx.js"></script>
+<script src="config.js?v=20261029-1400"></script>
+<script src="js/core-ext.js?v=20261029-1400"></script>
+<script src="js/student.js?v=20261029-1400"></script>
+<script src="js/stages.js?v=20261029-1400"></script>
+<script src="js/practice.js?v=20261029-1400"></script>
+<script src="js/ai.js?v=20261029-1400"></script>
+<script src="js/teacher.js?v=20261029-1400"></script>
+<script src="js/fx.js?v=20261029-1400"></script>
 </body>
 </html>

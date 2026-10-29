@@ -1,5 +1,5 @@
 /* นิทานพูดได้ — offline support. App files: network first (so updates arrive), cache when offline. */
-const CACHE = 'tsb-v4';
+const CACHE = 'tsb-v5';
 const SHELL = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
   'js/core-ext.js', 'js/student.js', 'js/stages.js', 'js/practice.js', 'js/ai.js', 'js/teacher.js', 'js/fx.js', 'logo-aya2.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
