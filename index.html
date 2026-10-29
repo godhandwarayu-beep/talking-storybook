@@ -5,7 +5,15 @@
 <script>
 /* เปิดลิงก์แล้วได้เวอร์ชันล่าสุดทันที: ถ้าบนเว็บมีเวอร์ชันใหม่กว่า ล้างไฟล์แอปที่เครื่องเก็บไว้ แล้วโหลดใหม่ครั้งเดียว
    (ไม่ลบข้อมูลนักเรียน นิทาน หรือเสียงที่อัดไว้) */
-window.TSB_VERSION = '20261029-1400';
+window.TSB_VERSION = '20261029-1415';
+/* เปิดลิงก์ใหม่ทุกครั้ง = เริ่มใหม่ที่หน้า "หนูชื่ออะไร" (ออกจากระบบเด็กคนก่อน และปิดโหมดครู)
+   ข้อมูลนิทาน ความก้าวหน้า และเสียงที่อัดไว้ยังอยู่ครบ   การโหลดซ้ำในแท็บเดิมไม่นับเป็นการเปิดใหม่ */
+(function () {
+  var fresh = true;
+  try { fresh = sessionStorage.getItem('tsb-open') !== '1'; sessionStorage.setItem('tsb-open', '1'); } catch (e) {}
+  if (!fresh) return;
+  try { ['tsb-me', 'tsb-tunlock'].forEach(function (k) { localStorage.removeItem(k); }); localStorage.setItem('tsb-guest', 'false'); localStorage.setItem('tsb-teacher', 'false'); } catch (e) {}
+})();
 (function () {
   if (location.protocol !== 'https:' || !window.fetch) return;
   fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -2278,13 +2286,13 @@ window.addEventListener('load', async function boot() {
   }
 });
 </script>
-<script src="config.js?v=20261029-1400"></script>
-<script src="js/core-ext.js?v=20261029-1400"></script>
-<script src="js/student.js?v=20261029-1400"></script>
-<script src="js/stages.js?v=20261029-1400"></script>
-<script src="js/practice.js?v=20261029-1400"></script>
-<script src="js/ai.js?v=20261029-1400"></script>
-<script src="js/teacher.js?v=20261029-1400"></script>
-<script src="js/fx.js?v=20261029-1400"></script>
+<script src="config.js?v=20261029-1415"></script>
+<script src="js/core-ext.js?v=20261029-1415"></script>
+<script src="js/student.js?v=20261029-1415"></script>
+<script src="js/stages.js?v=20261029-1415"></script>
+<script src="js/practice.js?v=20261029-1415"></script>
+<script src="js/ai.js?v=20261029-1415"></script>
+<script src="js/teacher.js?v=20261029-1415"></script>
+<script src="js/fx.js?v=20261029-1415"></script>
 </body>
 </html>
