@@ -190,7 +190,19 @@ document.addEventListener('click', async e => {
 
 /* ---------- offline app ---------- */
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+    // check for a new version whenever the app comes back to the screen
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {}));
+  // a new version took over: reload once so the page matches it (not while a child is reading or recording)
+  const hadSW = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadSW || reloading) return;
+    const busy = () => (typeof listening !== 'undefined' && listening) || !document.getElementById('vRead').hidden;
+    const go = () => { if (busy()) { setTimeout(go, 3000); return; } reloading = true; location.reload(); };
+    go();
+  });
 }
 
 /* ---------- teacher area is locked with the teacher code ----------

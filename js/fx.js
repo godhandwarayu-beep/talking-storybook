@@ -470,9 +470,7 @@ function stars(canvas) {
 function runIntro() {
   const q = new URLSearchParams(location.search);
   const force = q.get('intro') === '1';
-  let seen = false; try { seen = sessionStorage.getItem('tsb-intro') === '1'; } catch (e) {}
-  if (!force && (seen || navigator.webdriver || q.get('intro') === '0' || q.get('book'))) return;
-  try { sessionStorage.setItem('tsb-intro', '1'); } catch (e) {}
+  if (!force && (navigator.webdriver || q.get('intro') === '0' || q.get('book'))) return;
   document.body.classList.add('intro-on');
   const el = document.createElement('div');
   el.id = 'intro'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'ยินดีต้อนรับสู่หนังสือพูดได้');
