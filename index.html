@@ -164,6 +164,12 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .helpcard.leaving{transform:translate(-50%,-44%) scale(.94)}
 @keyframes popin{from{opacity:0;transform:translate(-50%,-38%) scale(.8)}}
 @keyframes fadein{from{opacity:0}}
+.credit{margin:40px auto calc(76px + env(safe-area-inset-bottom,0px));padding:16px 18px;max-width:640px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center;border-top:1px solid var(--line);color:var(--ink-soft);font-size:14px;line-height:1.6}
+.credit img{flex:none;width:44px;height:auto}
+.credit .org{font-weight:600;color:var(--ink)}
+.credit .by{font-size:13px;letter-spacing:.02em}
+@media (max-width:520px){.credit{flex-direction:column;gap:6px}}
+
 .helpcard .helpword{margin:0;font-size:clamp(46px,13vw,72px);line-height:1.15;color:var(--ink)}
 .helpcard .row.top{justify-content:space-between;align-items:center}
 .helpcard .row.hhead{justify-content:space-between;align-items:center;flex-wrap:nowrap}
@@ -428,6 +434,11 @@ details.settings summary{cursor:pointer;font-weight:600;font-size:14px;color:var
     </div>
     <h3 class="shelf-title">ชั้นหนังสือ</h3>
     <div class="shelf" id="shelf"></div>
+    <footer class="credit">
+      <img src="logo-aya2.png" alt="" width="44" height="42">
+      <div><div class="org">สำนักงานเขตพื้นที่การศึกษาประถมศึกษาพระนครศรีอยุธยา เขต 2</div>
+      <div class="by">พัฒนาโดย © ICT AYA2 TEAM</div></div>
+    </footer>
   </section>
 
   <!-- READER -->
