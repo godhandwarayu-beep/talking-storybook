@@ -63,6 +63,44 @@ window.startPractice = function () {
   tutorSay('มาฝึกคำที่เคยสะดุดกันนะ อ่านทีละคำเลย');
 };
 
+/* ---------- RT cheering: after each part, and a grand finale after all three ---------- */
+addOverlay('rtCheer', `<div class="big-modal"><div class="card cheer-card">
+  <svg class="owl cheer-owl" data-owl viewBox="0 0 80 80" aria-hidden="true"></svg>
+  <div class="win-stars" id="chStars"></div>
+  <h3 id="chTitle"></h3><p class="login-sub" id="chText"></p>
+  <div class="prow" style="justify-content:center"><button class="btn primary big" id="chNext"></button></div>
+</div></div>`);
+addOverlay('rtFw', `<canvas id="rtFwCanvas"></canvas>`);
+addStyle(`
+.cheer-card{background:linear-gradient(180deg,#eafaf5,#fff 45%)!important}
+.cheer-owl{width:120px;height:132px;justify-self:center;animation:hop .6s ease-in-out infinite alternate}
+#rtFw{position:fixed;inset:0;z-index:60;pointer-events:none}
+#rtFwCanvas{width:100%;height:100%}
+.blank{display:inline-block;min-width:3.2em;border-bottom:4px dashed var(--sun-deep);margin:0 .2em;vertical-align:baseline}
+`);
+const kidName = () => (ME ? meName() : '');
+async function owlSay(lines) { for (const l of lines) { await speak(l, 1); await sleep(200); } }
+function rtCheer(part, title, text, nextLabel, next) {
+  stopListening(); stopSpeech();
+  $('#chStars').innerHTML = [0, 1, 2].map(k => `<i style="animation-delay:${k * 0.15}s">★</i>`).join('');
+  $('#chTitle').textContent = title; $('#chText').textContent = text;
+  $('#chNext').textContent = nextLabel;
+  $('#chNext').onclick = () => { stopSpeech(); $('#rtCheer').hidden = true; next(); };
+  $('#rtCheer').hidden = false; renderOwls();
+  magicSound(true); setTimeout(() => applause(3), 500);
+  const n = kidName();
+  setTimeout(() => owlSay(['เย้! ดีใจด้วยนะ' + (n ? ' ' + n : ''), 'ผ่านตอนที่ ' + part + ' แล้ว เก่งมากเลย']), 900);
+}
+let stopRtFw = null;
+function rtFinale() {
+  $('#rtFw').hidden = false;
+  stopRtFw && stopRtFw(); stopRtFw = fireworks($('#rtFwCanvas'), 8);
+  setTimeout(() => { $('#rtFw').hidden = true; }, 11000);
+  fanfare(); setTimeout(boom, 300); setTimeout(() => applause(5), 1300);
+  const n = kidName();
+  setTimeout(() => owlSay(['เย้! ยินดีด้วยนะ' + (n ? ' ' + n : ''), 'ทำแบบทดสอบการอ่านครบทั้ง 3 ตอนแล้ว', 'เก่งมากเลย ทุกคนปรบมือให้' + (n ? ' ' + n : 'หนู') + ' ดัง ๆ เลย!']).then(() => applause(3)), 2400);
+}
+
 /* ---------- 2) RT-style test: words · timed passage · comprehension ---------- */
 window.startRT = function (book) {
   if (!book) return;
@@ -73,7 +111,7 @@ window.startRT = function (book) {
   const intro = () => showResult('แบบทดสอบการอ่าน (แบบ RT)', `<div class="rt-parts">
       <div class="rt-part"><span>ตอนที่ 1 อ่านออกเสียงคำ</span><b>${words.length} คำ</b></div>
       <div class="rt-part"><span>ตอนที่ 2 อ่านข้อความ (จับเวลา)</span><b>1 ข้อความ</b></div>
-      <div class="rt-part"><span>ตอนที่ 3 อ่านรู้เรื่อง</span><b>ตอบคำถาม</b></div></div>
+      <div class="rt-part"><span>ตอนที่ 3 จงเติมคำให้สมบูรณ์มีความหมาย</span><b>เลือกคำตอบ</b></div></div>
       <p class="login-sub">ระหว่างทดสอบพี่ฮูกจะไม่ช่วยสะกด ถ้าอ่านคำไหนไม่ได้กด "ข้ามคำ"</p>`,
     [['ยกเลิก', () => openBook(book)], ['เริ่มทดสอบ', part1, true]]);
   function part1() {
@@ -84,7 +122,7 @@ window.startRT = function (book) {
       onPage() {
         const ok = statusOfWord() === 'ok'; if (ok) R.words.ok++; else R.words.missed.push(words[cur.p]);
         $('#doneBanner').hidden = true;
-        setTimeout(() => { if (cur.p < words.length - 1) loadPage(cur.p + 1); else part2(); }, 450);
+        setTimeout(() => { if (cur.p < words.length - 1) loadPage(cur.p + 1); else rtCheer(1, 'ผ่านตอนที่ 1 แล้ว!', 'อ่านออกเสียงคำได้ ' + R.words.ok + ' จาก ' + R.words.total + ' คำ', 'ไปตอนที่ 2', part2); }, 450);
       },
       onExit() { openBook(book); }
     };
@@ -102,7 +140,7 @@ window.startRT = function (book) {
         R.passage.seconds = st.startAt && st.endAt ? Math.max(1, Math.round((st.endAt - st.startAt) / 1000)) : 0;
         R.passage.wcpm = R.passage.seconds >= 3 ? Math.min(250, Math.round(R.passage.ok / (R.passage.seconds / 60))) : 0;
         $('#doneBanner').hidden = true;
-        setTimeout(() => { stopListening(); cur.book = null; part3(); }, 700);
+        setTimeout(() => { stopListening(); cur.book = null; rtCheer(2, 'ผ่านตอนที่ 2 แล้ว!', 'อ่านข้อความถูก ' + R.passage.ok + ' จาก ' + R.passage.words + ' คำ' + (R.passage.wcpm ? ' · ' + R.passage.wcpm + ' คำต่อนาที' : ''), 'ไปตอนที่ 3', part3); }, 700);
       },
       onExit() { openBook(book); }
     };
@@ -114,11 +152,13 @@ window.startRT = function (book) {
     const qs = (book.questions && book.questions.length ? book.questions : autoQuestions(book)).slice(0, 5);
     R.quiz.total = qs.length;
     if (!qs.length) return finish();
+    tutorSay('ตอนที่ 3 จงเติมคำให้สมบูรณ์มีความหมาย');
     let k = 0;
     const ask = () => {
       const q = qs[k];
-      showResult('ตอนที่ 3: อ่านรู้เรื่อง (ข้อ ' + (k + 1) + '/' + qs.length + ')', `<p class="say-word" style="font-size:clamp(24px,6vw,34px)">${esc(q.q)}</p><div class="rt-parts" id="quizChoices">${q.choices.map((c, j) => `<button class="btn" data-ch="${j}" style="font-size:22px;min-height:60px">${esc(c)}</button>`).join('')}</div>`,
-        [['ฟังคำถาม', () => { $('#resultBox').hidden = false; speak(q.q, 1); }]]);
+      const cloze = /_{2,}/.test(q.q);
+      showResult('ตอนที่ 3: ' + (cloze ? 'จงเติมคำให้สมบูรณ์มีความหมาย' : 'อ่านแล้วเลือกคำตอบที่ถูกต้อง') + ' (ข้อ ' + (k + 1) + '/' + qs.length + ')', `<p class="say-word" style="font-size:clamp(24px,6vw,34px)">${esc(q.q).replace(/_{2,}/, '<span class="blank"></span>')}</p><div class="rt-parts" id="quizChoices">${q.choices.map((c, j) => `<button class="btn" data-ch="${j}" style="font-size:22px;min-height:60px">${esc(c)}</button>`).join('')}</div>`,
+        [['ฟังโจทย์', () => { $('#resultBox').hidden = false; speak(q.q.replace(/_{2,}/, ' อะไร '), 1); }]]);
       $('#quizChoices').onclick = e => {
         const b = e.target.closest('[data-ch]'); if (!b) return;
         if (+b.dataset.ch === q.answer) { R.quiz.ok++; magicSound(false); } else sndOops();
@@ -139,8 +179,9 @@ window.startRT = function (book) {
       <div class="rt-part"><span>อ่านข้อความถูก</span><b>${R.passage.ok}/${R.passage.words} คำ</b></div>
       <div class="rt-part"><span>ความเร็วในการอ่าน</span><b>${R.passage.wcpm} คำ/นาที</b></div>
       <div class="rt-part"><span>อ่านรู้เรื่อง</span><b>${R.quiz.ok}/${R.quiz.total}</b></div></div>`,
-      [['กลับไปที่ปกนิทาน', () => openBook(book), true]]);
-    fanfare(); confetti();
+      [['ฟังคำชมอีกครั้ง', () => { $('#resultBox').hidden = false; rtFinale(); }], ['กลับไปที่ปกนิทาน', () => { stopSpeech(); $('#rtFw').hidden = true; openBook(book); }, true]]);
+    $('#rbTitle').textContent = 'สุดยอด! ทำแบบทดสอบครบ 3 ตอนแล้ว';
+    rtFinale();
   }
   intro();
 };
@@ -153,7 +194,7 @@ function autoQuestions(book) {
     const ans = toks[Math.floor(Math.random() * toks.length)].t.replace(/\//g, '');
     const wrong = vocab.filter(v => v !== ans).sort(() => Math.random() - 0.5).slice(0, 2);
     const choices = [ans, ...wrong].sort(() => Math.random() - 0.5);
-    return { q: 'เติมคำ: ' + s.replace(/\//g, '').replace(ans, ' ____ '), choices, answer: choices.indexOf(ans) };
+    return { q: s.replace(/\//g, '').replace(ans, ' ____ '), choices, answer: choices.indexOf(ans) };
   }).filter(q => q.choices.length >= 2);
 }
 
@@ -200,7 +241,7 @@ addSection('vClass', `
     <button class="btn primary" id="clAuto">${ICON.play}<span>อ่านให้ฟังทีละคำ</span></button>
     <button class="btn" id="clNextW">คำถัดไป ▶</button><button class="btn" id="clNextP">หน้าถัดไป ▶▶</button>
   </div>
-  <p class="login-sub" style="text-align:center">ใช้ปุ่มลูกศร ← → หรือ Space เลื่อนทีละคำ ให้นักเรียนอ่านพร้อมกันตามคำที่เน้นสี</p>`);
+  <p class="login-sub" id="classHint" style="text-align:center">ใช้ปุ่มลูกศร ← → หรือ Space เลื่อนทีละคำ ให้นักเรียนอ่านพร้อมกันตามคำที่เน้นสี</p>`);
 addStyle(`
 #vClass{min-height:calc(100vh - 120px)}
 .class-bar{display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
@@ -219,7 +260,25 @@ let CL = { book: null, p: 0, w: -1, auto: false };
 window.openClassMode = function (book) {
   CL = { book, p: 0, w: -1, auto: false };
   show('vClass'); keepAwake(true); clRender();
+  classFull(true);                       // like pressing F11: the stage fills the whole screen
 };
+// full screen: the browser's own full screen where it exists (needs the tap that opened the mode),
+// and on top of that a page layout that hides everything except the story, which also works on iPhone
+function classFull(on) {
+  document.body.classList.toggle('class-full', on);
+  const de = document.documentElement, fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  try {
+    if (on && !fsEl) { const req = de.requestFullscreen || de.webkitRequestFullscreen; if (req) { const r = req.call(de, { navigationUI: 'hide' }); if (r && r.catch) r.catch(() => {}); } }
+    if (!on && fsEl) { const ex = document.exitFullscreen || document.webkitExitFullscreen; if (ex) { const r = ex.call(document); if (r && r.catch) r.catch(() => {}); } }
+  } catch (e) {}
+  $('#clFull').textContent = on ? 'ย่อหน้าจอ' : 'เต็มจอ';
+  window.scrollTo(0, 0);
+}
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+  if (!(document.fullscreenElement || document.webkitFullscreenElement) && document.body.classList.contains('class-full') && !$('#vClass').hidden) {
+    document.body.classList.remove('class-full'); $('#clFull').textContent = 'เต็มจอ';
+  }
+}));
 function clWords() { return tokenize(CL.book.pages[CL.p].text); }
 function clRender() {
   const pg = CL.book.pages[CL.p], toks = clWords();
@@ -254,8 +313,8 @@ async function clAuto() {
   }
   CL.auto = false; $('#clAuto span').textContent = 'อ่านให้ฟังทีละคำ';
 }
-$('#clBack').onclick = () => { CL.auto = false; stopSpeech(); keepAwake(false); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); openBook(CL.book); };
-$('#clFull').onclick = () => { const el = document.documentElement; if (!document.fullscreenElement) el.requestFullscreen && el.requestFullscreen().catch(() => toast('อุปกรณ์นี้เต็มจอไม่ได้')); else document.exitFullscreen(); };
+$('#clBack').onclick = () => { CL.auto = false; stopSpeech(); keepAwake(false); classFull(false); openBook(CL.book); };
+$('#clFull').onclick = () => classFull(!document.body.classList.contains('class-full'));
 $('#clPrevP').onclick = () => { if (CL.p > 0) { CL.p--; CL.w = -1; clRender(); } };
 $('#clNextP').onclick = () => { if (CL.p < CL.book.pages.length - 1) { CL.p++; CL.w = -1; clRender(); } };
 $('#clPrevW').onclick = () => clStep(-1);
@@ -280,3 +339,17 @@ loadPage = function (i) {
   $('#btnRecMe').hidden = isTest();
 };
 addStyle(`#rText.single{font-size:clamp(64px,16vw,120px);text-align:center;line-height:1.6}`);
+
+addStyle(`
+body.class-full .top, body.class-full #classHint{display:none}
+body.class-full #vClass{position:fixed;inset:0;z-index:45;background:var(--ground);display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto;
+  padding:max(10px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
+body.class-full .class-bar{margin:0;flex:none}
+body.class-full .class-bar h2{font-size:clamp(18px,2.4vw,30px)}
+body.class-full .class-stage{flex:1;min-height:0;gap:18px}
+body.class-full .class-pic img{max-height:calc(100dvh - 190px)}
+body.class-full .class-text{font-size:clamp(40px,6.4vw,120px);max-height:calc(100dvh - 190px);overflow:auto}
+body.class-full .class-ctrl{margin:0;flex:none}
+body.class-full .class-ctrl .btn{min-height:50px}
+@media (orientation:portrait){body.class-full .class-pic img{max-height:34dvh}body.class-full .class-text{max-height:none}}
+`);
