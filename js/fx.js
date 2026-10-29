@@ -146,10 +146,106 @@ function endCaption(target) {
 }
 const estSeconds = (text, rate) => Math.max(0.8, seg(text).length / (13 * (rate || 1) * (voicePref.rate || 1)));
 
-const _playPcm = playPcm;
-playPcm = function (pcm) { startCaption(pcm.length / HQ_RATE); return _playPcm(pcm); };
-const _speakDevice = speakDevice;
-speakDevice = function (text, rate) { startCaption(estSeconds(text, rate)); return _speakDevice(text, rate); };
+/* ---------- reliable playback on phones and tablets ----------
+   Why the owl was sometimes silent:
+   - iPhone/iPad mute Web Audio when the side switch is on silent, and after the microphone was used the sound can
+     go to the quiet earpiece. An <audio> element plays as media instead, so Gemini/teacher clips now use one.
+   - Phones suspend the audio engine when the screen locks or the app goes to the background; it is resumed (and
+     awaited) before every clip, and again on every tap.
+   - Chrome on Android drops a spoken sentence when its utterance object is garbage-collected, when the speech queue
+     is stuck after a cancel, or when speech starts while speech recognition still holds the microphone.
+     The utterance is kept alive, a stuck queue is cleared, recognition is given time to let go of the microphone,
+     and speech that never starts is retried once. */
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
+const player = new Audio(); player.preload = 'auto'; player.setAttribute('playsinline', ''); player.setAttribute('webkit-playsinline', '');
+let playerOk = false, playerUrl = '', playerFin = null;
+function unlockAudio() {
+  const c = ctx();
+  if (c && c.state !== 'running') c.resume().catch(() => {});
+  if (!playerOk) { player.src = SILENT_WAV; const p = player.play(); if (p && p.then) p.then(() => { playerOk = true; }).catch(() => {}); }
+  if (tts) { try { if (tts.paused) tts.resume(); } catch (e) {} if (!thVoices.length) pickVoice(); }
+}
+['pointerdown', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, { capture: true, passive: true }));
+document.addEventListener('visibilitychange', () => { if (!document.hidden && actx && actx.state !== 'running') actx.resume().catch(() => {}); });
+
+function pcmToWavUrl(pcm) {
+  const n = pcm.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, HQ_RATE, true); v.setUint32(28, HQ_RATE * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+  new Int16Array(buf, 44).set(pcm);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+// recognition must let go of the microphone before a phone will play speech out loud
+async function micQuiet() {
+  if (typeof listening === 'undefined' || !listening) return;
+  pauseRecForSpeech();
+  if (MOBILE) await sleep(320);
+}
+const _playPcmWebAudio = playPcm;
+playPcm = async function (pcm) {
+  const secs = pcm.length / HQ_RATE, my = speakToken;
+  await micQuiet();
+  if (actx && actx.state !== 'running') { try { await Promise.race([actx.resume(), sleep(400)]); } catch (e) {} }
+  if (my !== speakToken) return;
+  if (playerUrl) URL.revokeObjectURL(playerUrl);
+  playerUrl = pcmToWavUrl(pcm);
+  player.src = playerUrl;
+  hqPlaying = true; startCaption(secs);
+  const ok = await new Promise(res => {
+    let done = false; const fin = r => { if (done) return; done = true; player.onended = player.onerror = null; playerFin = null; res(r); };
+    playerFin = () => fin(true);
+    player.onended = () => fin(true); player.onerror = () => fin(false);
+    setTimeout(() => fin(true), secs * 1000 + 1500);
+    const p = player.play();
+    if (p && p.catch) p.catch(() => fin(false));
+  });
+  hqPlaying = false;
+  if (!ok) return _playPcmWebAudio(pcm);   // the browser refused the media element: use Web Audio instead
+};
+
+let uttKeep = null;   // Chrome on Android loses utterances that are not referenced anywhere
+speakDevice = async function (text, rate) {
+  if (!tts) return;
+  const my = speakToken;
+  await micQuiet();
+  if (my !== speakToken) return;
+  if (!thVoices.length) pickVoice();
+  if (!thVoices.length) noThaiVoice();
+  if (tts.speaking || tts.pending) { tts.cancel(); lastCancel = Date.now(); }
+  try { tts.resume(); } catch (e) {}
+  const gap = 160 - (Date.now() - lastCancel);
+  if (gap > 0) await sleep(gap);
+  if (my !== speakToken) return;
+  const once = () => new Promise(res => {
+    const u = new SpeechSynthesisUtterance(text); uttKeep = u;
+    u.lang = 'th-TH'; if (thVoice) u.voice = thVoice;
+    u.rate = Math.max(0.3, Math.min(1.6, (rate || 0.85) * (voicePref.rate || 1))); u.pitch = 1; u.volume = 1;
+    let started = false, done = false;
+    const fin = r => { if (done) return; done = true; clearInterval(keep); res(r); };
+    u.onstart = () => { started = true; startCaption(estSeconds(text, rate)); };
+    u.onend = () => fin('end'); u.onerror = e => fin(e && e.error === 'interrupted' ? 'end' : 'error');
+    // Chrome stops long speech after about 15 s unless it is nudged
+    const keep = setInterval(() => { try { if (tts.speaking && !tts.paused) tts.resume(); } catch (e) {} }, 5000);
+    setTimeout(() => { if (!started) fin('nostart'); }, 2200);
+    setTimeout(() => fin('end'), 2500 + text.length * 420);
+    tts.speak(u);
+  });
+  let r = await once();
+  if (r === 'nostart' || r === 'error') {        // stuck engine: clear it and try once more
+    try { tts.cancel(); } catch (e) {} lastCancel = Date.now(); await sleep(250);
+    if (my !== speakToken) return;
+    r = await once();
+  }
+  if (r !== 'end' && my === speakToken) {           // no sound on this device: still show the words, long enough to read
+    const secs = estSeconds(text, rate); startCaption(secs); await sleep(secs * 1000);
+  }
+};
+let thaiWarned = false;
+function noThaiVoice() {
+  if (thaiWarned || hqConfigured()) return; thaiWarned = true;
+  toast('เครื่องนี้ไม่มีเสียงอ่านภาษาไทย ให้ติดตั้งเสียงภาษาไทยในการตั้งค่าเครื่อง หรือให้ครูใส่ Gemini key เพื่อใช้เสียงพี่ฮูก');
+}
 const _speak = speak;
 speak = async function (text, rate) {
   const withCap = wantCaption(text), target = capTarget;
@@ -168,7 +264,7 @@ window.owlLine = async function (text, bubble) {
 };
 // stopping speech also stops the typing and hides the bar
 const _stopSpeech = stopSpeech;
-stopSpeech = function () { _stopSpeech(); pendingCap = null; clearInterval(typeT); cap.classList.remove('show'); };
+stopSpeech = function () { _stopSpeech(); try { player.pause(); } catch (e) {} if (playerFin) playerFin(); pendingCap = null; clearInterval(typeT); cap.classList.remove('show'); };
 
 /* ================= 2) background music ================= */
 const Music = (() => {
@@ -379,12 +475,12 @@ function runIntro() {
   try { sessionStorage.setItem('tsb-intro', '1'); } catch (e) {}
   document.body.classList.add('intro-on');
   const el = document.createElement('div');
-  el.id = 'intro'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'ยินดีต้อนรับสู่นิทานพูดได้');
+  el.id = 'intro'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'ยินดีต้อนรับสู่หนังสือพูดได้');
   el.innerHTML = `<canvas class="in-bg"></canvas><div class="in-grid"></div>
     <div class="in-stage">
       <div class="in-logo-wrap"><div class="in-ring"></div><div class="in-ring in-r2"></div><img class="in-logo" src="logo-aya2.png" alt="ตราสำนักงานเขตพื้นที่การศึกษาประถมศึกษาพระนครศรีอยุธยา เขต 2"><div class="in-shine"></div><div class="in-scan"></div></div>
       <div class="in-sub">สพป.พระนครศรีอยุธยา เขต 2 ภูมิใจนำเสนอ</div>
-      <h1 class="in-title">นิทานพูดได้</h1>
+      <h1 class="in-title">หนังสือพูดได้</h1>
       <div class="in-tap">✨ แตะเพื่อเข้าสู่โปรแกรม</div>
     </div>
     <canvas class="in-fx"></canvas>
@@ -398,7 +494,7 @@ function runIntro() {
     el.classList.add('in-out'); document.body.classList.add('intro-reveal');
     setTimeout(() => { stopStars(); el.remove(); document.body.classList.remove('intro-on', 'intro-reveal'); Music.unlockNow();
       document.dispatchEvent(new CustomEvent('tsb:introDone'));
-      setTimeout(() => { if (!OVERLAYS.some(visible) && !visible('pinGate')) owlLine(ME ? 'ยินดีต้อนรับกลับมานะ ' + meName() + ' ไปอ่านนิทานกันเถอะ' : 'สวัสดีจ้ะ ยินดีต้อนรับสู่นิทานพูดได้ มาฝึกอ่านกับพี่ฮูกกันนะ'); }, 500);
+      setTimeout(() => { if (!OVERLAYS.some(visible) && !visible('pinGate')) owlLine(ME ? 'ยินดีต้อนรับกลับมานะ ' + meName() + ' ไปอ่านนิทานกันเถอะ' : 'สวัสดีจ้ะ ยินดีต้อนรับสู่หนังสือพูดได้ มาฝึกอ่านกับพี่ฮูกกันนะ'); }, 500);
     }, 750);
   };
   const go = async () => {
