@@ -212,7 +212,7 @@ addOverlay('pinGate', `<div class="big-modal"><div class="card">
   <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="justify-self:center;color:var(--teal)"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
   <h3>สำหรับครู</h3><p class="login-sub" id="pgText">ใส่รหัสครูเพื่อสร้างนิทานจากภาพ นำเข้าไฟล์ และใช้ระบบของครู</p>
   <input type="password" id="pgPin" autocomplete="off" autocapitalize="characters" spellcheck="false" style="font-size:24px;text-align:center;max-width:260px;justify-self:center;letter-spacing:2px">
-  <label class="autohelp" for="pgRemember" style="justify-content:center"><input type="checkbox" id="pgRemember">จำเครื่องนี้ไว้ (ใช้เฉพาะเครื่องของครู)</label>
+  <label class="autohelp" for="pgRemember" style="justify-content:center" hidden><input type="checkbox" id="pgRemember">จำเครื่องนี้ไว้</label>
   <p class="ocrst err" id="pgErr"></p>
   <div class="prow" style="justify-content:center"><button class="btn ghost" id="pgCancel">ยกเลิก</button><button class="btn primary" id="pgOk">เข้าสู่ระบบครู</button></div>
 </div></div>`);
